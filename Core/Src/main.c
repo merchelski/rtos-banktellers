@@ -19,10 +19,12 @@
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
 #include "cmsis_os.h"
+#include "rng.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include <stdio.h>
+#include <inttypes.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -39,6 +41,8 @@
 /* USER CODE BEGIN PM */
 #define TOTAL_SIM_TIME_MIN (420)
 #define SIM_MIN_TO_MS(minutes) ((minutes) * (100))
+#define SIM_SEC_TO_MS(sec) ((sec) * (1.6667))
+#define NUM_SEGMENT_DIGITS (4)
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
@@ -132,7 +136,11 @@ void StartTeller03(void *argument);
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
 
-/* --- S1-S3 SHIELD BUTTONS --- */
+/**
+* @brief Callback for S1-S3 SHIELD BUTTONS interrupt.
+* @param GPIO_Pin: The GPIO_Pin of the button that generated the interrupt.
+* @retval None
+*/
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 {
 	uint8_t buffer[100];
@@ -158,8 +166,17 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 	}
 }
 
-/* --- USED FOR 7 SEGMENT DISPLAY --- */
-void shiftOut(GPIO_TypeDef* data_port, uint16_t data_pin, GPIO_TypeDef* clock_port, uint16_t clock_pin, uint8_t value) {
+/**
+* @brief Sets 7-segment pin values using a shift register.
+*
+* @param data_port: The port of the GPIO pin associated with the data of the display.
+* @param data_pin: The GPIO data pin.
+* @param clock_port: The port of the GPIO pin associated with the clock used to operate shift register.
+* @param clock_pin: The GPIO clock pin.
+* @param value: The value to shift into the data pin.
+* @retval None
+*/
+static inline void shiftOut(GPIO_TypeDef* data_port, uint16_t data_pin, GPIO_TypeDef* clock_port, uint16_t clock_pin, uint8_t value) {
 	for(int ii=0x80; ii; ii>>=1) {
 		HAL_GPIO_WritePin(clock_port, clock_pin, GPIO_PIN_RESET);
 		HAL_GPIO_WritePin(data_port, data_pin, (value&ii)!=0);
@@ -167,7 +184,15 @@ void shiftOut(GPIO_TypeDef* data_port, uint16_t data_pin, GPIO_TypeDef* clock_po
 	}
 }
 
-void set_segment_digit(uint8_t digit, uint8_t value)
+
+/**
+* @brief Helper function which activates appropriate segments for a particular digit in the 7-segment display.
+*
+* @param digit: The digit to set (four in total).
+* @param value: The value to set.
+* @retval None
+*/
+static inline void set_segment_digit(uint8_t digit, uint8_t value)
 {
 	HAL_GPIO_WritePin(SHLD_D4_SEG7_Latch_GPIO_Port, SHLD_D4_SEG7_Latch_Pin, GPIO_PIN_RESET);
 	shiftOut(SHLD_D8_SEG7_Data_GPIO_Port, SHLD_D8_SEG7_Data_Pin, SHLD_D7_SEG7_Clock_GPIO_Port, SHLD_D7_SEG7_Clock_Pin, value);
@@ -175,18 +200,24 @@ void set_segment_digit(uint8_t digit, uint8_t value)
 	HAL_GPIO_WritePin(SHLD_D4_SEG7_Latch_GPIO_Port, SHLD_D4_SEG7_Latch_Pin, GPIO_PIN_SET);
 }
 
-// Needs to be constantly refreshed - so doesn't work
+/*
+* @brief Sets the 7-segment display value.
+*
+* @param num: The four digit number to set the display to (MAX: 9999).
+* @retval None
+*/
 void set_segment_display(uint16_t num)
 {
 	uint8_t digit = 0;
 	uint8_t value;
-	while((num > 0) /*&& (digit < NUM_SEGMENT_DIGITS)*/)
+	while((num > 0) && (digit < NUM_SEGMENT_DIGITS))
 	{
 		value = num % 10;
 		set_segment_digit(SEGMENT_DIGIT[digit], SEGMENT_NUM[value]);
 		num /= 10;
 		digit++;
 	}
+	set_segment_digit(0, 0);
 }
 
 /* USER CODE END 0 */
@@ -273,6 +304,11 @@ int main(void)
   // Grab reference point to get an accurate reading of simulated time.
   SIMULATED_TIME_START = HAL_GetTick();
 
+//  osThreadSuspend(genCustomerHandle);
+  osThreadSuspend(teller01Handle);
+  osThreadSuspend(teller02Handle);
+  osThreadSuspend(teller03Handle);
+
   /* USER CODE END RTOS_THREADS */
 
   /* USER CODE BEGIN RTOS_EVENTS */
@@ -281,6 +317,7 @@ int main(void)
 
   /* Start scheduler */
   osKernelStart();
+
 
   /* We should never get here as control is now taken by the scheduler */
   /* Infinite loop */
@@ -538,8 +575,8 @@ void StartGenCustomerTask(void *argument)
 
   for(;;)
   {
-	CUSTOMER_QUEUE_COUNT--;
-	osDelay(10);
+	CUSTOMER_QUEUE_COUNT--; // testing purposes
+	osDelay(100);
   }
   /* USER CODE END StartGenCustomerTask */
 }
@@ -559,11 +596,11 @@ void StartTeller01(void *argument)
   int n;
   for(;;)
   {
-	n = sprintf((char*)buffer, "HEY ITS A TELLER!");
+	n = sprintf((char*)buffer, "HEY ITS TELLER 01!\r\n");
 	osMutexAcquire(Mutex01Handle, osWaitForever);
-	HAL_UART_Transmit(&huart2, buffer, n, 100U);
+	HAL_UART_Transmit(&huart2, buffer, n, 10U);
 	osMutexRelease(Mutex01Handle);
-    osDelay(10);
+    osDelay(100);
   }
   /* USER CODE END StartTeller01 */
 }
@@ -583,11 +620,11 @@ void StartTeller02(void *argument)
   int n;
   for(;;)
   {
-	n = sprintf((char*)buffer, "HEY ITS A TELLER!");
+	n = sprintf((char*)buffer, "HEY ITS TELLER 02!\r\n");
 	osMutexAcquire(Mutex01Handle, osWaitForever);
-	HAL_UART_Transmit(&huart2, buffer, n, 100U);
+	HAL_UART_Transmit(&huart2, buffer, n, 10U);
 	osMutexRelease(Mutex01Handle);
-	osDelay(10);
+	osDelay(100);
   }
   /* USER CODE END StartTeller02 */
 }
@@ -607,11 +644,11 @@ void StartTeller03(void *argument)
   int n;
   for(;;)
   {
-	n = sprintf((char*)buffer, "HEY ITS A TELLER!");
+	n = sprintf((char*)buffer, "HEY ITS TELLER 03!");
 	osMutexAcquire(Mutex01Handle, osWaitForever);
-	HAL_UART_Transmit(&huart2, buffer, n, 100U);
+	HAL_UART_Transmit(&huart2, buffer, n, 10U);
 	osMutexRelease(Mutex01Handle);
-    osDelay(10);
+    osDelay(100);
   }
   /* USER CODE END StartTeller03 */
 }
