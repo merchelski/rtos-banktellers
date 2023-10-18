@@ -22,7 +22,7 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-
+#include <stdio.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -37,7 +37,8 @@
 
 /* Private macro -------------------------------------------------------------*/
 /* USER CODE BEGIN PM */
-
+#define TOTAL_SIM_TIME_MIN (420)
+#define SIM_MIN_TO_MS(minutes) ((minutes) * (100))
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
@@ -91,7 +92,7 @@ const osMutexAttr_t Mutex01_attributes = {
   .name = "Mutex01"
 };
 /* USER CODE BEGIN PV */
-
+int32_t SIMULATED_TIME_START;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -111,7 +112,30 @@ void StartTeller03(void *argument);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
+{
+	uint8_t buffer[100];
+	int data_size;
+	data_size = sprintf((char*)buffer, "A BUTTON PRESSED!!\r\n");
+	HAL_UART_Transmit(&huart2, buffer, data_size, 100U);
+	if(GPIO_Pin == S1_SHLD_BUTTON_Pin)
+	{
+		data_size = sprintf((char*)buffer, "S1 BUTTON PRESSED!!\r\n");
+		HAL_UART_Transmit(&huart2, buffer, data_size, 100U);
+	}
 
+	if(GPIO_Pin == S2_SHLD_BUTTON_Pin)
+	{
+		data_size = sprintf((char*)buffer, "S2 BUTTON PRESSED!!\r\n");
+		HAL_UART_Transmit(&huart2, buffer, data_size, 100U);
+	}
+
+	if(GPIO_Pin == S3_SHLD_BUTTON_Pin)
+	{
+		data_size = sprintf((char*)buffer, "S3 BUTTON PRESSED!!\r\n");
+		HAL_UART_Transmit(&huart2, buffer, data_size, 100U);
+	}
+}
 /* USER CODE END 0 */
 
 /**
@@ -192,6 +216,19 @@ int main(void)
 
   /* USER CODE BEGIN RTOS_THREADS */
   /* add threads, ... */
+
+  // start simulated timer
+  SIMULATED_TIME_START = HAL_GetTick();
+  uint8_t buffer[100];
+  int data_size;
+  data_size = sprintf((char*)buffer, "SIM START: %ld ; SIM STOP TIME: %d\r\n", SIMULATED_TIME_START, SIM_MIN_TO_MS(TOTAL_SIM_TIME_MIN));
+  HAL_UART_Transmit(&huart2, buffer, data_size, 100U);
+
+  // temporary for testing
+  osThreadSuspend(genCustomerHandle);
+//  osThreadSuspend(teller01Handle);
+//  osThreadSuspend(teller02Handle);
+//  osThreadSuspend(teller03Handle);
 
   /* USER CODE END RTOS_THREADS */
 
@@ -406,6 +443,18 @@ static void MX_GPIO_Init(void)
   HAL_GPIO_Init(SHLD_D4_SEG7_Latch_GPIO_Port, &GPIO_InitStruct);
 
 /* USER CODE BEGIN MX_GPIO_Init_2 */
+
+  // S1_SHLD_BUTTON
+  HAL_NVIC_SetPriority(EXTI1_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(EXTI1_IRQn);
+
+  // S2_SHLD_BUTTON
+  HAL_NVIC_SetPriority(EXTI4_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(EXTI4_IRQn);
+
+  // S3_SHLD_BUTTON
+  HAL_NVIC_SetPriority(EXTI0_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(EXTI0_IRQn);
 /* USER CODE END MX_GPIO_Init_2 */
 }
 
@@ -442,9 +491,10 @@ void StartGenCustomerTask(void *argument)
 {
   /* USER CODE BEGIN StartGenCustomerTask */
   /* Infinite loop */
+
   for(;;)
   {
-    osDelay(1);
+	osDelay(1);
   }
   /* USER CODE END StartGenCustomerTask */
 }
@@ -460,9 +510,18 @@ void StartTeller01(void *argument)
 {
   /* USER CODE BEGIN StartTeller01 */
   /* Infinite loop */
+  uint8_t buffer[100];
+  int data_size;
+
   for(;;)
   {
-    osDelay(1);
+	data_size = sprintf((char*)buffer, "Teller01 - Current elapsed ticks: %ld\r\n", HAL_GetTick() - SIMULATED_TIME_START);
+	HAL_UART_Transmit(&huart2, buffer, data_size, 100U);
+    if(HAL_GetTick() >= (SIM_MIN_TO_MS(TOTAL_SIM_TIME_MIN) + SIMULATED_TIME_START))
+	{
+		osThreadSuspend(teller01Handle);
+	}
+    osDelay(1000);
   }
   /* USER CODE END StartTeller01 */
 }
@@ -478,9 +537,18 @@ void StartTeller02(void *argument)
 {
   /* USER CODE BEGIN StartTeller02 */
   /* Infinite loop */
+  uint8_t buffer[100];
+  int data_size;
+
   for(;;)
   {
-    osDelay(1);
+	data_size = sprintf((char*)buffer, "Teller02 - Current elapsed ticks: %ld\r\n", HAL_GetTick() - SIMULATED_TIME_START);
+	HAL_UART_Transmit(&huart2, buffer, data_size, 100U);
+	if(HAL_GetTick() >= (SIM_MIN_TO_MS(TOTAL_SIM_TIME_MIN) + SIMULATED_TIME_START))
+	{
+		osThreadSuspend(teller02Handle);
+	}
+	osDelay(100);
   }
   /* USER CODE END StartTeller02 */
 }
