@@ -46,12 +46,12 @@ TIM_HandleTypeDef htim2;
 
 UART_HandleTypeDef huart2;
 
-/* Definitions for defaultTask */
-osThreadId_t defaultTaskHandle;
-const osThreadAttr_t defaultTask_attributes = {
-  .name = "defaultTask",
+/* Definitions for updateSegment */
+osThreadId_t updateSegmentHandle;
+const osThreadAttr_t updateSegment_attributes = {
+  .name = "updateSegment",
   .stack_size = 128 * 4,
-  .priority = (osPriority_t) osPriorityNormal,
+  .priority = (osPriority_t) osPriorityRealtime7,
 };
 /* Definitions for genCustomer */
 osThreadId_t genCustomerHandle;
@@ -93,6 +93,25 @@ const osMutexAttr_t Mutex01_attributes = {
 };
 /* USER CODE BEGIN PV */
 int32_t SIMULATED_TIME_START;
+uint16_t CUSTOMER_QUEUE_COUNT = 1234;
+uint8_t SEGMENT_DIGIT[4] = {
+		0b00001000, // rightmost
+		0b00000100, // left of rightmost
+		0b00000010, // right of leftmost
+		0b00000001	// leftmost
+};
+uint8_t SEGMENT_NUM[10] = {
+		0b11000000, // 0
+		0b11111001, // 1
+		0b10100100, // 2
+		0b10110000, // 3
+		0b10011001, // 4
+		0b10010010, // 5
+		0b10000010, // 6
+		0b11111000, // 7
+		0b10000000, // 8
+		0b10010000  // 9
+};
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -100,7 +119,7 @@ void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_USART2_UART_Init(void);
 static void MX_TIM2_Init(void);
-void StartDefaultTask(void *argument);
+void StartUpdateSegment(void *argument);
 void StartGenCustomerTask(void *argument);
 void StartTeller01(void *argument);
 void StartTeller02(void *argument);
@@ -112,6 +131,8 @@ void StartTeller03(void *argument);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+
+/* --- S1-S3 SHIELD BUTTONS --- */
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 {
 	uint8_t buffer[100];
@@ -136,6 +157,38 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 		HAL_UART_Transmit(&huart2, buffer, data_size, 100U);
 	}
 }
+
+/* --- USED FOR 7 SEGMENT DISPLAY --- */
+void shiftOut(GPIO_TypeDef* data_port, uint16_t data_pin, GPIO_TypeDef* clock_port, uint16_t clock_pin, uint8_t value) {
+	for(int ii=0x80; ii; ii>>=1) {
+		HAL_GPIO_WritePin(clock_port, clock_pin, GPIO_PIN_RESET);
+		HAL_GPIO_WritePin(data_port, data_pin, (value&ii)!=0);
+		HAL_GPIO_WritePin(clock_port, clock_pin, GPIO_PIN_SET);
+	}
+}
+
+void set_segment_digit(uint8_t digit, uint8_t value)
+{
+	HAL_GPIO_WritePin(SHLD_D4_SEG7_Latch_GPIO_Port, SHLD_D4_SEG7_Latch_Pin, GPIO_PIN_RESET);
+	shiftOut(SHLD_D8_SEG7_Data_GPIO_Port, SHLD_D8_SEG7_Data_Pin, SHLD_D7_SEG7_Clock_GPIO_Port, SHLD_D7_SEG7_Clock_Pin, value);
+	shiftOut(SHLD_D8_SEG7_Data_GPIO_Port, SHLD_D8_SEG7_Data_Pin, SHLD_D7_SEG7_Clock_GPIO_Port, SHLD_D7_SEG7_Clock_Pin, digit);
+	HAL_GPIO_WritePin(SHLD_D4_SEG7_Latch_GPIO_Port, SHLD_D4_SEG7_Latch_Pin, GPIO_PIN_SET);
+}
+
+// Needs to be constantly refreshed - so doesn't work
+void set_segment_display(uint16_t num)
+{
+	uint8_t digit = 0;
+	uint8_t value;
+	while((num > 0) /*&& (digit < NUM_SEGMENT_DIGITS)*/)
+	{
+		value = num % 10;
+		set_segment_digit(SEGMENT_DIGIT[digit], SEGMENT_NUM[value]);
+		num /= 10;
+		digit++;
+	}
+}
+
 /* USER CODE END 0 */
 
 /**
@@ -199,8 +252,8 @@ int main(void)
   /* USER CODE END RTOS_QUEUES */
 
   /* Create the thread(s) */
-  /* creation of defaultTask */
-  defaultTaskHandle = osThreadNew(StartDefaultTask, NULL, &defaultTask_attributes);
+  /* creation of updateSegment */
+  updateSegmentHandle = osThreadNew(StartUpdateSegment, NULL, &updateSegment_attributes);
 
   /* creation of genCustomer */
   genCustomerHandle = osThreadNew(StartGenCustomerTask, NULL, &genCustomer_attributes);
@@ -217,18 +270,8 @@ int main(void)
   /* USER CODE BEGIN RTOS_THREADS */
   /* add threads, ... */
 
-  // start simulated timer
+  // Grab reference point to get an accurate reading of simulated time.
   SIMULATED_TIME_START = HAL_GetTick();
-  uint8_t buffer[100];
-  int data_size;
-  data_size = sprintf((char*)buffer, "SIM START: %ld ; SIM STOP TIME: %d\r\n", SIMULATED_TIME_START, SIM_MIN_TO_MS(TOTAL_SIM_TIME_MIN));
-  HAL_UART_Transmit(&huart2, buffer, data_size, 100U);
-
-  // temporary for testing
-  osThreadSuspend(genCustomerHandle);
-//  osThreadSuspend(teller01Handle);
-//  osThreadSuspend(teller02Handle);
-//  osThreadSuspend(teller03Handle);
 
   /* USER CODE END RTOS_THREADS */
 
@@ -319,7 +362,7 @@ static void MX_TIM2_Init(void)
 
   /* USER CODE END TIM2_Init 1 */
   htim2.Instance = TIM2;
-  htim2.Init.Prescaler = 15999;
+  htim2.Init.Prescaler = 0;
   htim2.Init.CounterMode = TIM_COUNTERMODE_UP;
   htim2.Init.Period = 4294967295;
   htim2.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
@@ -462,19 +505,20 @@ static void MX_GPIO_Init(void)
 
 /* USER CODE END 4 */
 
-/* USER CODE BEGIN Header_StartDefaultTask */
+/* USER CODE BEGIN Header_StartUpdateSegment */
 /**
-  * @brief  Function implementing the defaultTask thread.
-  * @param  argument: Not used
-  * @retval None
-  */
-/* USER CODE END Header_StartDefaultTask */
-void StartDefaultTask(void *argument)
+* @brief Function implementing the updateSegment thread.
+* @param argument: Not used
+* @retval None
+*/
+/* USER CODE END Header_StartUpdateSegment */
+void StartUpdateSegment(void *argument)
 {
   /* USER CODE BEGIN 5 */
   /* Infinite loop */
   for(;;)
   {
+	set_segment_display(CUSTOMER_QUEUE_COUNT);
     osDelay(1);
   }
   /* USER CODE END 5 */
@@ -494,7 +538,8 @@ void StartGenCustomerTask(void *argument)
 
   for(;;)
   {
-	osDelay(1);
+	CUSTOMER_QUEUE_COUNT--;
+	osDelay(10);
   }
   /* USER CODE END StartGenCustomerTask */
 }
@@ -511,17 +556,14 @@ void StartTeller01(void *argument)
   /* USER CODE BEGIN StartTeller01 */
   /* Infinite loop */
   uint8_t buffer[100];
-  int data_size;
-
+  int n;
   for(;;)
   {
-	data_size = sprintf((char*)buffer, "Teller01 - Current elapsed ticks: %ld\r\n", HAL_GetTick() - SIMULATED_TIME_START);
-	HAL_UART_Transmit(&huart2, buffer, data_size, 100U);
-    if(HAL_GetTick() >= (SIM_MIN_TO_MS(TOTAL_SIM_TIME_MIN) + SIMULATED_TIME_START))
-	{
-		osThreadSuspend(teller01Handle);
-	}
-    osDelay(1000);
+	n = sprintf((char*)buffer, "HEY ITS A TELLER!");
+	osMutexAcquire(Mutex01Handle, osWaitForever);
+	HAL_UART_Transmit(&huart2, buffer, n, 100U);
+	osMutexRelease(Mutex01Handle);
+    osDelay(10);
   }
   /* USER CODE END StartTeller01 */
 }
@@ -538,17 +580,14 @@ void StartTeller02(void *argument)
   /* USER CODE BEGIN StartTeller02 */
   /* Infinite loop */
   uint8_t buffer[100];
-  int data_size;
-
+  int n;
   for(;;)
   {
-	data_size = sprintf((char*)buffer, "Teller02 - Current elapsed ticks: %ld\r\n", HAL_GetTick() - SIMULATED_TIME_START);
-	HAL_UART_Transmit(&huart2, buffer, data_size, 100U);
-	if(HAL_GetTick() >= (SIM_MIN_TO_MS(TOTAL_SIM_TIME_MIN) + SIMULATED_TIME_START))
-	{
-		osThreadSuspend(teller02Handle);
-	}
-	osDelay(100);
+	n = sprintf((char*)buffer, "HEY ITS A TELLER!");
+	osMutexAcquire(Mutex01Handle, osWaitForever);
+	HAL_UART_Transmit(&huart2, buffer, n, 100U);
+	osMutexRelease(Mutex01Handle);
+	osDelay(10);
   }
   /* USER CODE END StartTeller02 */
 }
@@ -564,9 +603,15 @@ void StartTeller03(void *argument)
 {
   /* USER CODE BEGIN StartTeller03 */
   /* Infinite loop */
+  uint8_t buffer[100];
+  int n;
   for(;;)
   {
-    osDelay(1);
+	n = sprintf((char*)buffer, "HEY ITS A TELLER!");
+	osMutexAcquire(Mutex01Handle, osWaitForever);
+	HAL_UART_Transmit(&huart2, buffer, n, 100U);
+	osMutexRelease(Mutex01Handle);
+    osDelay(10);
   }
   /* USER CODE END StartTeller03 */
 }
