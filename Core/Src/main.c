@@ -19,12 +19,15 @@
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
 #include "cmsis_os.h"
-#include "rng.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include <stdio.h>
 #include <inttypes.h>
+#include <stdbool.h>
+
+#include "rng.h"
+#include "info.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -39,10 +42,22 @@
 
 /* Private macro -------------------------------------------------------------*/
 /* USER CODE BEGIN PM */
-#define TOTAL_SIM_TIME_MIN (420)
-#define SIM_MIN_TO_MS(minutes) ((minutes) * (100))
-#define SIM_SEC_TO_MS(sec) ((sec) * (1.6667))
+#define TOTAL_TIME_IN_DAY_MIN ((7*60UL))
+
+#define SIM_MIN_TO_MS(minutes) ((minutes) * (100UL))
+#define SIM_SEC_TO_MS(sec) ((secUL) * (1.6667)
+
+#define MS_TO_SIM_MIN(ms) ((ms) / 100UL)
+#define MS_TO_SIM_HOURS(ms) ((ms) / (100*60UL))
+
+#define TOTAL_SIM_TIME_MS (SIM_MIN_TO_MS(TOTAL_TIME_IN_DAY_MIN))
+
 #define NUM_SEGMENT_DIGITS (4)
+
+#define MAX(a,b) \
+	({ __typeof__ (a) _a = (a); \
+	   __typeof__ (b) _b = (b); \
+	 _a > _b ? _a : _b; })
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
@@ -85,6 +100,13 @@ const osThreadAttr_t teller03_attributes = {
   .stack_size = 128 * 4,
   .priority = (osPriority_t) osPriorityLow,
 };
+/* Definitions for simMonitorInfo */
+osThreadId_t simMonitorInfoHandle;
+const osThreadAttr_t simMonitorInfo_attributes = {
+  .name = "simMonitorInfo",
+  .stack_size = 128 * 4,
+  .priority = (osPriority_t) osPriorityLow,
+};
 /* Definitions for customerQueue */
 osMessageQueueId_t customerQueueHandle;
 const osMessageQueueAttr_t customerQueue_attributes = {
@@ -96,14 +118,17 @@ const osMutexAttr_t Mutex01_attributes = {
   .name = "Mutex01"
 };
 /* USER CODE BEGIN PV */
-int32_t SIMULATED_TIME_START;
-uint16_t CUSTOMER_QUEUE_COUNT = 1234;
+uint32_t SIMULATED_TIME_START;
+
+// 7-segment display digits
 uint8_t SEGMENT_DIGIT[4] = {
-		0b00001000, // rightmost
-		0b00000100, // left of rightmost
-		0b00000010, // right of leftmost
-		0b00000001	// leftmost
+		0b00001000, // Rightmost
+		0b00000100, // Left of rightmost
+		0b00000010, // Right of leftmost
+		0b00000001	// Leftmost
 };
+
+// Display a single digit number
 uint8_t SEGMENT_NUM[10] = {
 		0b11000000, // 0
 		0b11111001, // 1
@@ -116,6 +141,13 @@ uint8_t SEGMENT_NUM[10] = {
 		0b10000000, // 8
 		0b10010000  // 9
 };
+
+
+TELLER_INFO teller01_info;
+TELLER_INFO teller02_info;
+TELLER_INFO teller03_info;
+
+
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -128,9 +160,10 @@ void StartGenCustomerTask(void *argument);
 void StartTeller01(void *argument);
 void StartTeller02(void *argument);
 void StartTeller03(void *argument);
+void StartSimMonitorInfo(void *argument);
 
 /* USER CODE BEGIN PFP */
-
+void teller_functionality(TELLER_INFO* teller_info, osThreadId_t tellerHandler);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -143,27 +176,49 @@ void StartTeller03(void *argument);
 */
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 {
-	uint8_t buffer[100];
-	int data_size;
-	data_size = sprintf((char*)buffer, "A BUTTON PRESSED!!\r\n");
-	HAL_UART_Transmit(&huart2, buffer, data_size, 100U);
+//	uint8_t buffer[100];
+//	int data_size;
+//	data_size = sprintf((char*)buffer, "A BUTTON PRESSED!!\r\n");
+//	HAL_UART_Transmit(&huart2, buffer, data_size, 100U);
+
+	TELLER_INFO* teller;
+//	char* teller_name;
+
+	// First button corresponds to teller01
 	if(GPIO_Pin == S1_SHLD_BUTTON_Pin)
 	{
-		data_size = sprintf((char*)buffer, "S1 BUTTON PRESSED!!\r\n");
-		HAL_UART_Transmit(&huart2, buffer, data_size, 100U);
+		teller = &teller01_info;
+//		teller_name = "TELLER01";
 	}
 
+	// Second button corresponds to teller02
 	if(GPIO_Pin == S2_SHLD_BUTTON_Pin)
 	{
-		data_size = sprintf((char*)buffer, "S2 BUTTON PRESSED!!\r\n");
-		HAL_UART_Transmit(&huart2, buffer, data_size, 100U);
+		teller = &teller02_info;
+//		teller_name = "TELLER02";
 	}
 
+	// Third button corresponds to teller03
 	if(GPIO_Pin == S3_SHLD_BUTTON_Pin)
 	{
-		data_size = sprintf((char*)buffer, "S3 BUTTON PRESSED!!\r\n");
-		HAL_UART_Transmit(&huart2, buffer, data_size, 100U);
+		teller = &teller03_info;
+//		teller_name = "TELLER03";
 	}
+
+	// Callback is triggered by both the rising AND falling edge, so we just toggle.
+	teller->is_on_forced_break ^= 1;
+
+//	if(teller->is_on_forced_break) // Means just toggled, so teller was told to go on break.
+//	{
+//		data_size = sprintf((char*)buffer, "%s IS BEING YELLED AT TO GO ON AND STAY ON A FORCED BREAK!!\r\n", teller_name);
+//	}
+//	else
+//	{
+//		data_size = sprintf((char*)buffer, "%s YELLING HAS STOPPED!!\r\n", teller_name);
+//	}
+//
+//	// Send message - for testing purposes right now...
+//	HAL_UART_Transmit(&huart2, buffer, data_size, 100U);
 }
 
 /**
@@ -188,7 +243,7 @@ static inline void shiftOut(GPIO_TypeDef* data_port, uint16_t data_pin, GPIO_Typ
 /**
 * @brief Helper function which activates appropriate segments for a particular digit in the 7-segment display.
 *
-* @param digit: The digit to set (four in total).
+* @param digit: The digit to set (four in total)	.
 * @param value: The value to set.
 * @retval None
 */
@@ -210,7 +265,7 @@ void set_segment_display(uint16_t num)
 {
 	uint8_t digit = 0;
 	uint8_t value;
-	while((num > 0) && (digit < NUM_SEGMENT_DIGITS))
+	while(digit < NUM_SEGMENT_DIGITS)
 	{
 		value = num % 10;
 		set_segment_digit(SEGMENT_DIGIT[digit], SEGMENT_NUM[value]);
@@ -254,6 +309,11 @@ int main(void)
   MX_TIM2_Init();
   /* USER CODE BEGIN 2 */
 
+  // Initialize tellers
+  init_teller(&teller01_info);
+  init_teller(&teller02_info);
+  init_teller(&teller03_info);
+
   /* USER CODE END 2 */
 
   /* Init scheduler */
@@ -276,7 +336,7 @@ int main(void)
 
   /* Create the queue(s) */
   /* creation of customerQueue */
-  customerQueueHandle = osMessageQueueNew (421, sizeof(uint16_t), &customerQueue_attributes);
+  customerQueueHandle = osMessageQueueNew (421, sizeof(uint64_t), &customerQueue_attributes);
 
   /* USER CODE BEGIN RTOS_QUEUES */
   /* add queues, ... */
@@ -298,16 +358,22 @@ int main(void)
   /* creation of teller03 */
   teller03Handle = osThreadNew(StartTeller03, NULL, &teller03_attributes);
 
+  /* creation of simMonitorInfo */
+  simMonitorInfoHandle = osThreadNew(StartSimMonitorInfo, NULL, &simMonitorInfo_attributes);
+
   /* USER CODE BEGIN RTOS_THREADS */
   /* add threads, ... */
 
   // Grab reference point to get an accurate reading of simulated time.
   SIMULATED_TIME_START = HAL_GetTick();
 
+
+  /* ----- TESTING THREADS -----*/
 //  osThreadSuspend(genCustomerHandle);
-  osThreadSuspend(teller01Handle);
+//  osThreadSuspend(teller01Handle);
   osThreadSuspend(teller02Handle);
   osThreadSuspend(teller03Handle);
+//  osThreadSuspend(updateSegmentHandle);
 
   /* USER CODE END RTOS_THREADS */
 
@@ -317,7 +383,6 @@ int main(void)
 
   /* Start scheduler */
   osKernelStart();
-
 
   /* We should never get here as control is now taken by the scheduler */
   /* Infinite loop */
@@ -539,7 +604,120 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
+void teller_functionality(TELLER_INFO* teller_info, osThreadId_t tellerHandler)
+{
+	CUSTOMER_INFO current_customer;
+	osStatus_t queue_status;
+	uint32_t queue_time;
+	uint32_t break_time;
+	uint32_t wait_time;
+	uint32_t forced_break_start_time;
 
+	// For testing - temporary
+	uint8_t buffer[100];
+	int data_size;
+
+	for(;;)
+	{
+		// Waiting for a customer to arrive, this is different than taking a break.
+		if(teller_info->waiting_flag == true)
+		{
+			osDelay(1);
+		}
+
+		// Stop when the day ends.
+		if(HAL_GetTick() >= (TOTAL_SIM_TIME_MS + SIMULATED_TIME_START))
+		{
+			osThreadSuspend(tellerHandler);
+		}
+
+		// Get next customer from the queue.
+		queue_status = osMessageQueueGet(customerQueueHandle, &current_customer, 0, osWaitForever);
+		if(queue_status == osOK) // retrieved
+		{
+			// If this is the first customer after waiting...
+			if(teller_info->waiting_flag == true)
+			{
+				// ...record the time spent waiting. The teller is no longer waiting.
+				teller_info->waiting_flag = false;
+				wait_time = HAL_GetTick() - teller_info->last_waiting_start_time;
+				teller_info->max_wait_time = MAX(teller_info->max_wait_time, wait_time);
+				teller_info->total_wait_time += wait_time;
+			}
+
+			// Record statistic about customer...
+			teller_info->total_customers_serviced++;
+			teller_info->total_service_time += current_customer.service_time;
+			teller_info->max_transaction_time = MAX(teller_info->max_transaction_time, current_customer.service_time);
+
+			// This is time the customer had to wait in the queue before being serviced
+			queue_time = HAL_GetTick() - current_customer.time_entered_queue;
+
+
+			// Access global variables to update customer queue time statistics
+			osMutexAcquire(Mutex01Handle, osWaitForever);
+			max_customer_queue_time = MAX(max_customer_queue_time, queue_time);
+			total_customer_queue_time += queue_time;
+			osMutexRelease(Mutex01Handle);
+
+			// Customer service delay
+			osDelay(current_customer.service_time);
+		}
+		else if(queue_status == osErrorResource) // Empty queue -> teller is waiting for next customer.
+		{
+			teller_info->waiting_flag = true;
+
+			// Record when the teller started waiting to calculate total time waiting later.
+			teller_info->last_waiting_start_time = HAL_GetTick();
+		}
+
+		/* --- Check for breaks only after finishing with a customer --- */
+
+		// Forced break - takes priority over natural break
+		if(teller_info->is_on_forced_break == true)
+		{
+			data_size = sprintf((char*)buffer, "A TELLER IS GOING ON A FORCED BREAK!!\r\n");
+			HAL_UART_Transmit(&huart2, buffer, data_size, 100U);
+
+			// Grab reference point
+			forced_break_start_time = HAL_GetTick();
+
+			// Stay until the forced break is released
+			while(teller_info->is_on_forced_break == true)
+			{
+				osDelay(100); // Decently long delay - can be adjusted
+			}
+
+			// Record break time and updated statistics...
+			break_time = HAL_GetTick() - forced_break_start_time;
+			teller_info->max_break_time = MAX(teller_info->max_break_time, break_time);
+			teller_info->total_break_time += break_time;
+			teller_info->total_breaks_taken++;
+
+			// ...teller was just on break, so recalculate next available natural break time
+			teller_info->next_available_natural_break_time = HAL_GetTick() + rand_range(MIN_TELLER_BREAK_WAIT, MAX_TELLER_BREAK_WAIT);
+
+
+		} // Natural break
+		else if(HAL_GetTick() >= teller_info->next_available_natural_break_time)
+		{
+
+			// Generate break time and store statistics
+			break_time = rand_range(MIN_TELLER_BREAK_TIME, MAX_TELLER_BREAK_TIME);
+			teller_info->max_break_time = MAX(teller_info->max_break_time, break_time);
+			teller_info->total_break_time += break_time;
+			teller_info->total_breaks_taken++;
+			teller_info->next_available_natural_break_time = HAL_GetTick() + rand_range(MIN_TELLER_BREAK_WAIT, MAX_TELLER_BREAK_WAIT);
+
+			// Send message - for testing purposes right now...
+			data_size = sprintf((char*)buffer, "A TELLER IS GOING ON A NATURAL BREAK!!\r\n");
+			HAL_UART_Transmit(&huart2, buffer, data_size, 100U);
+
+			// Go on break...
+			osDelay(break_time);
+		}
+	}
+}
 /* USER CODE END 4 */
 
 /* USER CODE BEGIN Header_StartUpdateSegment */
@@ -555,7 +733,10 @@ void StartUpdateSegment(void *argument)
   /* Infinite loop */
   for(;;)
   {
-	set_segment_display(CUSTOMER_QUEUE_COUNT);
+	// Update 7-segment display
+	set_segment_display(osMessageQueueGetCount(customerQueueHandle));
+
+	// Need short delay for display to stay updated properly
     osDelay(1);
   }
   /* USER CODE END 5 */
@@ -571,13 +752,40 @@ void StartUpdateSegment(void *argument)
 void StartGenCustomerTask(void *argument)
 {
   /* USER CODE BEGIN StartGenCustomerTask */
-  /* Infinite loop */
 
+  uint32_t delay_until_next_customer_arrival;
+  CUSTOMER_INFO customer_template;
+  osStatus_t queue_status;
+
+  /* Infinite loop */
   for(;;)
   {
-	CUSTOMER_QUEUE_COUNT--; // testing purposes
-	osDelay(100);
+	// Stop when the day ends.
+	if(HAL_GetTick() >= (TOTAL_SIM_TIME_MS + SIMULATED_TIME_START))
+	{
+		osThreadSuspend(genCustomerHandle);
+	}
+
+	// New customer arrives every 1-4 minutes
+	delay_until_next_customer_arrival = rand_range(MIN_CUSTOMER_ARRIVAL_DELAY, MAX_CUSTOMER_ARRIVAL_DELAY);
+
+	// Generate a new customer with randomized service time
+	reset_and_init_customer(&customer_template);
+
+	// Send customer to queue to be picked up by tellers
+	queue_status = osMessageQueuePut(customerQueueHandle, &customer_template, 0U, osWaitForever);
+
+	if(queue_status == osOK)
+	{
+
+		// Record queue statistics
+		max_customer_queue_depth = MAX(max_customer_queue_depth, osMessageQueueGetCount(customerQueueHandle));
+
+		// Simulate time between customers
+		osDelay(delay_until_next_customer_arrival);
+	}
   }
+
   /* USER CODE END StartGenCustomerTask */
 }
 
@@ -592,16 +800,10 @@ void StartTeller01(void *argument)
 {
   /* USER CODE BEGIN StartTeller01 */
   /* Infinite loop */
-  uint8_t buffer[100];
-  int n;
-  for(;;)
-  {
-	n = sprintf((char*)buffer, "HEY ITS TELLER 01!\r\n");
-	osMutexAcquire(Mutex01Handle, osWaitForever);
-	HAL_UART_Transmit(&huart2, buffer, n, 10U);
-	osMutexRelease(Mutex01Handle);
-    osDelay(100);
-  }
+
+  // All tellers share the same functionality
+  teller_functionality(&teller01_info, teller01Handle);
+
   /* USER CODE END StartTeller01 */
 }
 
@@ -616,16 +818,10 @@ void StartTeller02(void *argument)
 {
   /* USER CODE BEGIN StartTeller02 */
   /* Infinite loop */
-  uint8_t buffer[100];
-  int n;
-  for(;;)
-  {
-	n = sprintf((char*)buffer, "HEY ITS TELLER 02!\r\n");
-	osMutexAcquire(Mutex01Handle, osWaitForever);
-	HAL_UART_Transmit(&huart2, buffer, n, 10U);
-	osMutexRelease(Mutex01Handle);
-	osDelay(100);
-  }
+
+  // All tellers share the same functionality
+  teller_functionality(&teller02_info, teller02Handle);
+
   /* USER CODE END StartTeller02 */
 }
 
@@ -640,17 +836,47 @@ void StartTeller03(void *argument)
 {
   /* USER CODE BEGIN StartTeller03 */
   /* Infinite loop */
+
+  // All tellers share the same functionality
+  teller_functionality(&teller03_info, teller03Handle);
+
+  /* USER CODE END StartTeller03 */
+}
+
+/* USER CODE BEGIN Header_StartSimMonitorInfo */
+/**
+* @brief Function implementing the simMonitorInfo thread.
+* @param argument: Not used
+* @retval None
+*/
+/* USER CODE END Header_StartSimMonitorInfo */
+void StartSimMonitorInfo(void *argument)
+{
+  /* USER CODE BEGIN StartSimMonitorInfo */
+  /* Infinite loop */
   uint8_t buffer[100];
-  int n;
+  int data_size;
+  uint32_t sim_min;
+  uint32_t sim_hours;
+  uint32_t current_time_ms;
   for(;;)
   {
-	n = sprintf((char*)buffer, "HEY ITS TELLER 03!");
-	osMutexAcquire(Mutex01Handle, osWaitForever);
-	HAL_UART_Transmit(&huart2, buffer, n, 10U);
-	osMutexRelease(Mutex01Handle);
+	current_time_ms = HAL_GetTick();
+
+	sim_hours = MS_TO_SIM_HOURS(current_time_ms);
+	sim_min = MS_TO_SIM_MIN(current_time_ms);
+
+	data_size = sprintf((char*)buffer, "CURRENT TIME: %02ld:%02ld\r\nTELLER01 Status:\r\n", ((sim_hours + 8) % 12) + 1, sim_min % 60);
+	HAL_UART_Transmit(&huart2, buffer, data_size, 100U);
+
+	// Stop when the day ends.
+	if(HAL_GetTick() >= (TOTAL_SIM_TIME_MS + SIMULATED_TIME_START))
+	{
+		osThreadSuspend(simMonitorInfoHandle);
+	}
     osDelay(100);
   }
-  /* USER CODE END StartTeller03 */
+  /* USER CODE END StartSimMonitorInfo */
 }
 
 /**
