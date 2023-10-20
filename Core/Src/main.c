@@ -872,7 +872,10 @@ void StartSimMonitorInfo(void *argument)
 	{
 		while((eTaskGetState(teller01Handle) != eSuspended) ||
 				(eTaskGetState(teller02Handle) != eSuspended) ||
-				(eTaskGetState(teller03Handle) != eSuspended));
+				(eTaskGetState(teller03Handle) != eSuspended))
+		{
+			osDelay(1);
+		}
 	}
 
 	sim_hours = MS_TO_SIM_HOURS(current_time_ms);
@@ -883,9 +886,10 @@ void StartSimMonitorInfo(void *argument)
 	teller03_info_str = STATUS_TO_STR[teller03_info.status];
 
 	// [A: 1/2] Build up the real time data...
-	monitor_data_size = sprintf((char*)monitor_buffer, "\r\n\r\nCURRENT TIME: %02ld:%02ld\r\nCustomers in queue: %ld\r\nTeller01 status: %s\r\nTeller02 status: %s\r\nTeller03 status: %s\r\n\r\n\r\n",
+	monitor_data_size = sprintf((char*)monitor_buffer, "\r\n\r\nCURRENT TIME: %02ld:%02ld%s\r\nCustomers in queue: %ld\r\nTeller01 status: %s\r\nTeller02 status: %s\r\nTeller03 status: %s\r\n\r\n\r\n",
 															(((sim_hours + 8) % 12) + 1),
 															(sim_min % 60),
+															(sim_hours < 3 ? "am" : "pm"),
 															osMessageQueueGetCount(customerQueueHandle),
 															teller01_info_str,
 															teller02_info_str,
