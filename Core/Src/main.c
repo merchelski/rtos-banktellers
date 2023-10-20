@@ -868,6 +868,13 @@ void StartSimMonitorInfo(void *argument)
   {
 	current_time_ms = HAL_GetTick();
 
+	if(HAL_GetTick() >= (TOTAL_SIM_TIME_MS + SIMULATED_TIME_START))
+	{
+		while((eTaskGetState(teller01Handle) != eSuspended) ||
+				(eTaskGetState(teller02Handle) != eSuspended) ||
+				(eTaskGetState(teller03Handle) != eSuspended));
+	}
+
 	sim_hours = MS_TO_SIM_HOURS(current_time_ms);
 	sim_min = MS_TO_SIM_MIN(current_time_ms);
 
@@ -886,6 +893,7 @@ void StartSimMonitorInfo(void *argument)
 
 	// [A: 2/2] ... and print it.
 	HAL_UART_Transmit(&huart2, monitor_buffer, monitor_data_size, 100U);
+
 
 	// Stop when the day ends.
 	if(HAL_GetTick() >= (TOTAL_SIM_TIME_MS + SIMULATED_TIME_START))

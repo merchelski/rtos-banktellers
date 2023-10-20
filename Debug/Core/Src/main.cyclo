@@ -13,6 +13,6 @@
 ../Core/Src/main.c:796:6:StartTeller01	1
 ../Core/Src/main.c:814:6:StartTeller02	1
 ../Core/Src/main.c:832:6:StartTeller03	1
-../Core/Src/main.c:850:6:StartSimMonitorInfo	2
-../Core/Src/main.c:1013:6:HAL_TIM_PeriodElapsedCallback	2
-../Core/Src/main.c:1030:6:Error_Handler	1
+../Core/Src/main.c:850:6:StartSimMonitorInfo	6
+../Core/Src/main.c:1021:6:HAL_TIM_PeriodElapsedCallback	2
+../Core/Src/main.c:1038:6:Error_Handler	1
