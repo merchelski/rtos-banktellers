@@ -149,6 +149,7 @@ const uint8_t SEGMENT_NUM[10] = {
 		0b10010000  // 9
 };
 
+// Converts teller's status to a string for display purposes.
 const char* STATUS_TO_STR[4] = {"working", "waiting", "on break", "done for the day"};
 
 // Stores all info related to tellers.
@@ -286,6 +287,11 @@ int main(void)
 
   /* USER CODE BEGIN Init */
 
+  // Initialize tellers
+  init_teller(&teller01_info);
+  init_teller(&teller02_info);
+  init_teller(&teller03_info);
+
   /* USER CODE END Init */
 
   /* Configure the system clock */
@@ -300,11 +306,6 @@ int main(void)
   MX_USART2_UART_Init();
   MX_TIM2_Init();
   /* USER CODE BEGIN 2 */
-
-  // Initialize tellers
-  init_teller(&teller01_info);
-  init_teller(&teller02_info);
-  init_teller(&teller03_info);
 
   /* USER CODE END 2 */
 

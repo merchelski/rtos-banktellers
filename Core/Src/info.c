@@ -17,12 +17,13 @@ uint16_t total_customer_queue_time = 0;
 uint16_t max_customer_queue_time = 0;
 uint16_t max_customer_queue_depth = 0;
 
+
 void init_teller(TELLER_INFO* teller)
 {
 	teller->max_wait_time = 0;
 	teller->max_service_time = 0;
 	teller->max_break_time = 0;
-	teller->min_break_time = (uint32_t)(-1);
+	teller->min_break_time = (uint32_t)(-1); // Max value for uint32_t
 	teller->total_service_time = 0;
 	teller->total_wait_time = 0;
 	teller->total_waits_taken = 0;
