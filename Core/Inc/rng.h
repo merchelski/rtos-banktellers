@@ -28,8 +28,8 @@ See <http://creativecommons.org/publicdomain/zero/1.0/>. */
 
 #include <stdint.h>
 
-#define SEED1 (2552996413275464428ULL)
-#define SEED2 (9599274583936742465ULL)
+#define SEED1 (8695496411175464428ULL)
+#define SEED2 (9599566571935742465ULL)
 
 /* Generate next random number in the sequence generated from seeds. */
 uint64_t generate_random_u64(void);

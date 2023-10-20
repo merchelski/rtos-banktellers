@@ -45,8 +45,9 @@
 #define TOTAL_TIME_IN_DAY_MIN ((7*60UL))
 
 #define SIM_MIN_TO_MS(minutes) ((minutes) * (100UL))
-#define SIM_SEC_TO_MS(sec) ((secUL) * (1.6667)
+#define SIM_SEC_TO_MS(sec) (((sec) * 5) / 3UL)
 
+#define MS_TO_SIM_SEC(ms) (((ms) * 3) / 5UL)
 #define MS_TO_SIM_MIN(ms) ((ms) / 100UL)
 #define MS_TO_SIM_HOURS(ms) ((ms) / (100*60UL))
 
@@ -58,6 +59,12 @@
 	({ __typeof__ (a) _a = (a); \
 	   __typeof__ (b) _b = (b); \
 	 _a > _b ? _a : _b; })
+
+#define MIN(a,b) \
+	({ __typeof__ (a) _a = (a); \
+	   __typeof__ (b) _b = (b); \
+	 _a < _b ? _a : _b; })
+
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
@@ -70,42 +77,42 @@ osThreadId_t updateSegmentHandle;
 const osThreadAttr_t updateSegment_attributes = {
   .name = "updateSegment",
   .stack_size = 128 * 4,
-  .priority = (osPriority_t) osPriorityRealtime7,
+  .priority = (osPriority_t) osPriorityAboveNormal,
 };
 /* Definitions for genCustomer */
 osThreadId_t genCustomerHandle;
 const osThreadAttr_t genCustomer_attributes = {
   .name = "genCustomer",
   .stack_size = 128 * 4,
-  .priority = (osPriority_t) osPriorityLow,
+  .priority = (osPriority_t) osPriorityRealtime,
 };
 /* Definitions for teller01 */
 osThreadId_t teller01Handle;
 const osThreadAttr_t teller01_attributes = {
   .name = "teller01",
   .stack_size = 128 * 4,
-  .priority = (osPriority_t) osPriorityLow,
+  .priority = (osPriority_t) osPriorityRealtime,
 };
 /* Definitions for teller02 */
 osThreadId_t teller02Handle;
 const osThreadAttr_t teller02_attributes = {
   .name = "teller02",
   .stack_size = 128 * 4,
-  .priority = (osPriority_t) osPriorityLow,
+  .priority = (osPriority_t) osPriorityRealtime,
 };
 /* Definitions for teller03 */
 osThreadId_t teller03Handle;
 const osThreadAttr_t teller03_attributes = {
   .name = "teller03",
   .stack_size = 128 * 4,
-  .priority = (osPriority_t) osPriorityLow,
+  .priority = (osPriority_t) osPriorityRealtime,
 };
 /* Definitions for simMonitorInfo */
 osThreadId_t simMonitorInfoHandle;
 const osThreadAttr_t simMonitorInfo_attributes = {
   .name = "simMonitorInfo",
   .stack_size = 128 * 4,
-  .priority = (osPriority_t) osPriorityLow,
+  .priority = (osPriority_t) osPriorityNormal,
 };
 /* Definitions for customerQueue */
 osMessageQueueId_t customerQueueHandle;
@@ -120,16 +127,16 @@ const osMutexAttr_t Mutex01_attributes = {
 /* USER CODE BEGIN PV */
 uint32_t SIMULATED_TIME_START;
 
-// 7-segment display digits
-uint8_t SEGMENT_DIGIT[4] = {
+// 7-segment display digits.
+const uint8_t SEGMENT_DIGIT[4] = {
 		0b00001000, // Rightmost
 		0b00000100, // Left of rightmost
 		0b00000010, // Right of leftmost
 		0b00000001	// Leftmost
 };
 
-// Display a single digit number
-uint8_t SEGMENT_NUM[10] = {
+// Display a single digit number.
+const uint8_t SEGMENT_NUM[10] = {
 		0b11000000, // 0
 		0b11111001, // 1
 		0b10100100, // 2
@@ -142,10 +149,16 @@ uint8_t SEGMENT_NUM[10] = {
 		0b10010000  // 9
 };
 
+const char* STATUS_TO_STR[4] = {"working", "waiting", "on break", "done for the day"};
 
+// Stores all info related to tellers.
 TELLER_INFO teller01_info;
 TELLER_INFO teller02_info;
 TELLER_INFO teller03_info;
+
+// Used by monitor task.
+uint8_t monitor_buffer[500];
+int monitor_data_size;
 
 
 /* USER CODE END PV */
@@ -176,49 +189,28 @@ void teller_functionality(TELLER_INFO* teller_info, osThreadId_t tellerHandler);
 */
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 {
-//	uint8_t buffer[100];
-//	int data_size;
-//	data_size = sprintf((char*)buffer, "A BUTTON PRESSED!!\r\n");
-//	HAL_UART_Transmit(&huart2, buffer, data_size, 100U);
-
 	TELLER_INFO* teller;
-//	char* teller_name;
 
-	// First button corresponds to teller01
+	// First button corresponds to teller01.
 	if(GPIO_Pin == S1_SHLD_BUTTON_Pin)
 	{
 		teller = &teller01_info;
-//		teller_name = "TELLER01";
 	}
 
-	// Second button corresponds to teller02
+	// Second button corresponds to teller02.
 	if(GPIO_Pin == S2_SHLD_BUTTON_Pin)
 	{
 		teller = &teller02_info;
-//		teller_name = "TELLER02";
 	}
 
-	// Third button corresponds to teller03
+	// Third button corresponds to teller03.
 	if(GPIO_Pin == S3_SHLD_BUTTON_Pin)
 	{
 		teller = &teller03_info;
-//		teller_name = "TELLER03";
 	}
 
 	// Callback is triggered by both the rising AND falling edge, so we just toggle.
-	teller->is_on_forced_break ^= 1;
-
-//	if(teller->is_on_forced_break) // Means just toggled, so teller was told to go on break.
-//	{
-//		data_size = sprintf((char*)buffer, "%s IS BEING YELLED AT TO GO ON AND STAY ON A FORCED BREAK!!\r\n", teller_name);
-//	}
-//	else
-//	{
-//		data_size = sprintf((char*)buffer, "%s YELLING HAS STOPPED!!\r\n", teller_name);
-//	}
-//
-//	// Send message - for testing purposes right now...
-//	HAL_UART_Transmit(&huart2, buffer, data_size, 100U);
+	teller->forced_break_flag ^= 1;
 }
 
 /**
@@ -368,12 +360,13 @@ int main(void)
   SIMULATED_TIME_START = HAL_GetTick();
 
 
-  /* ----- TESTING THREADS -----*/
+  /* ----- SUSPEND THREADS -----*/
 //  osThreadSuspend(genCustomerHandle);
 //  osThreadSuspend(teller01Handle);
-  osThreadSuspend(teller02Handle);
-  osThreadSuspend(teller03Handle);
+//  osThreadSuspend(teller02Handle);
+//  osThreadSuspend(teller03Handle);
 //  osThreadSuspend(updateSegmentHandle);
+//  osThreadSuspend(simMonitorInfoHandle);
 
   /* USER CODE END RTOS_THREADS */
 
@@ -387,6 +380,7 @@ int main(void)
   /* We should never get here as control is now taken by the scheduler */
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
+
   while (1)
   {
     /* USER CODE END WHILE */
@@ -607,113 +601,115 @@ static void MX_GPIO_Init(void)
 void teller_functionality(TELLER_INFO* teller_info, osThreadId_t tellerHandler)
 {
 	CUSTOMER_INFO current_customer;
-	osStatus_t queue_status;
-	uint32_t queue_time;
+	uint32_t customer_time_spent_in_queue;
 	uint32_t break_time;
-	uint32_t wait_time;
 	uint32_t forced_break_start_time;
 
-	// For testing - temporary
-	uint8_t buffer[100];
-	int data_size;
+	uint32_t pre_wait_reference;
+	uint32_t wait_discrepancy;
 
 	for(;;)
 	{
-		// Waiting for a customer to arrive, this is different than taking a break.
-		if(teller_info->waiting_flag == true)
-		{
-			osDelay(1);
-		}
+		// Teller starts working.
+		teller_info->status = status_working;
 
-		// Stop when the day ends.
+		// Stop teller when the day ends.
 		if(HAL_GetTick() >= (TOTAL_SIM_TIME_MS + SIMULATED_TIME_START))
 		{
+			teller_info->status = status_done_for_the_day;
 			osThreadSuspend(tellerHandler);
 		}
 
-		// Get next customer from the queue.
-		queue_status = osMessageQueueGet(customerQueueHandle, &current_customer, 0, osWaitForever);
-		if(queue_status == osOK) // retrieved
+		/* --- First step is to obtain a customer --- */
+
+		// [A: 1/2] We assume the teller will have to wait for a customer...
+		teller_info->status = status_waiting;
+
+		// [A: 2/2] ...so we grab a reference snapshot of the current time to calculate total wait later.
+		pre_wait_reference = HAL_GetTick();
+
+		// Attempt to grab the next customer from the queue.
+		osMessageQueueGet(customerQueueHandle, &current_customer, 0, osWaitForever);
+
+		// If the teller was able to unblock, it means a customer was successfully obtained -> teller is no longer waiting
+		wait_discrepancy = HAL_GetTick() - pre_wait_reference;
+		teller_info->status = status_working;
+
+		// This is time the customer had to wait in the queue before being serviced.
+		customer_time_spent_in_queue = HAL_GetTick() - current_customer.time_entered_queue;
+
+		// [B: 1/2] If the time discrepancy is too high, it probably means the teller had to wait...
+		if(wait_discrepancy > TELLER_WAIT_TOLERANCE)
 		{
-			// If this is the first customer after waiting...
-			if(teller_info->waiting_flag == true)
-			{
-				// ...record the time spent waiting. The teller is no longer waiting.
-				teller_info->waiting_flag = false;
-				wait_time = HAL_GetTick() - teller_info->last_waiting_start_time;
-				teller_info->max_wait_time = MAX(teller_info->max_wait_time, wait_time);
-				teller_info->total_wait_time += wait_time;
-			}
-
-			// Record statistic about customer...
-			teller_info->total_customers_serviced++;
-			teller_info->total_service_time += current_customer.service_time;
-			teller_info->max_transaction_time = MAX(teller_info->max_transaction_time, current_customer.service_time);
-
-			// This is time the customer had to wait in the queue before being serviced
-			queue_time = HAL_GetTick() - current_customer.time_entered_queue;
-
-
-			// Access global variables to update customer queue time statistics
-			osMutexAcquire(Mutex01Handle, osWaitForever);
-			max_customer_queue_time = MAX(max_customer_queue_time, queue_time);
-			total_customer_queue_time += queue_time;
-			osMutexRelease(Mutex01Handle);
-
-			// Customer service delay
-			osDelay(current_customer.service_time);
+			// [B: 2/2] ...so update the teller's wait statistics.
+			teller_info->total_wait_time += (wait_discrepancy - TELLER_WAIT_TOLERANCE);
+			teller_info->total_waits_taken++;
+			teller_info->max_wait_time = MAX(teller_info->max_wait_time, (wait_discrepancy - TELLER_WAIT_TOLERANCE));
 		}
-		else if(queue_status == osErrorResource) // Empty queue -> teller is waiting for next customer.
-		{
-			teller_info->waiting_flag = true;
 
-			// Record when the teller started waiting to calculate total time waiting later.
-			teller_info->last_waiting_start_time = HAL_GetTick();
-		}
+		/* --- Move on to process customer --- */
+
+		// Record statistic about customer.
+		teller_info->total_customers_serviced++;
+		teller_info->total_service_time += current_customer.service_time;
+		teller_info->max_service_time = MAX(teller_info->max_service_time, current_customer.service_time);
+
+
+		// Access global variables to update customer queue time statistics.
+		osMutexAcquire(Mutex01Handle, osWaitForever);
+		max_customer_queue_time = MAX(max_customer_queue_time, customer_time_spent_in_queue);
+		total_customer_queue_time += customer_time_spent_in_queue;
+		osMutexRelease(Mutex01Handle);
+
+		// Simulate time spent servicing customer.
+		osDelay(current_customer.service_time);
+
 
 		/* --- Check for breaks only after finishing with a customer --- */
 
-		// Forced break - takes priority over natural break
-		if(teller_info->is_on_forced_break == true)
+		// Forced break -> takes priority over natural break.
+		if(teller_info->forced_break_flag == true)
 		{
-			data_size = sprintf((char*)buffer, "A TELLER IS GOING ON A FORCED BREAK!!\r\n");
-			HAL_UART_Transmit(&huart2, buffer, data_size, 100U);
-
 			// Grab reference point
 			forced_break_start_time = HAL_GetTick();
+			teller_info->status = status_on_break;
 
 			// Stay until the forced break is released
-			while(teller_info->is_on_forced_break == true)
+			while(teller_info->forced_break_flag == true)
 			{
-				osDelay(100); // Decently long delay - can be adjusted
+				osDelay(1);
 			}
 
-			// Record break time and updated statistics...
+			// Break ends.
+			teller_info->status = status_working;
+
+			// [C: 1/2] Calculate break time and updated statistics...
 			break_time = HAL_GetTick() - forced_break_start_time;
 			teller_info->max_break_time = MAX(teller_info->max_break_time, break_time);
+			teller_info->min_break_time = MIN(teller_info->min_break_time, break_time);
 			teller_info->total_break_time += break_time;
 			teller_info->total_breaks_taken++;
 
-			// ...teller was just on break, so recalculate next available natural break time
+			// [C: 2/2] ...teller was just on break, so recalculate next available natural break time
 			teller_info->next_available_natural_break_time = HAL_GetTick() + rand_range(MIN_TELLER_BREAK_WAIT, MAX_TELLER_BREAK_WAIT);
 
 
-		} // Natural break
+		} // Natural break.
 		else if(HAL_GetTick() >= teller_info->next_available_natural_break_time)
 		{
 
-			// Generate break time and store statistics
+			// Generate a random break duration and update statistics.
 			break_time = rand_range(MIN_TELLER_BREAK_TIME, MAX_TELLER_BREAK_TIME);
 			teller_info->max_break_time = MAX(teller_info->max_break_time, break_time);
+			teller_info->min_break_time = MIN(teller_info->min_break_time, break_time);
 			teller_info->total_break_time += break_time;
 			teller_info->total_breaks_taken++;
+
+			// Generate next available break.
 			teller_info->next_available_natural_break_time = HAL_GetTick() + rand_range(MIN_TELLER_BREAK_WAIT, MAX_TELLER_BREAK_WAIT);
 
-			// Send message - for testing purposes right now...
-			data_size = sprintf((char*)buffer, "A TELLER IS GOING ON A NATURAL BREAK!!\r\n");
-			HAL_UART_Transmit(&huart2, buffer, data_size, 100U);
-
-			// Go on break...
+			// Go on break.
+			teller_info->status = status_on_break;
 			osDelay(break_time);
 		}
 	}
@@ -733,10 +729,16 @@ void StartUpdateSegment(void *argument)
   /* Infinite loop */
   for(;;)
   {
-	// Update 7-segment display
+	// Stop generator when the day ends.
+	if(HAL_GetTick() >= (TOTAL_SIM_TIME_MS + SIMULATED_TIME_START))
+	{
+		osThreadSuspend(updateSegmentHandle);
+	}
+
+	// [A: 1/2] Constantly update the 7-segment display...
 	set_segment_display(osMessageQueueGetCount(customerQueueHandle));
 
-	// Need short delay for display to stay updated properly
+	// [A: 2/2] ... need short delay for display to stay updated properly.
     osDelay(1);
   }
   /* USER CODE END 5 */
@@ -755,35 +757,30 @@ void StartGenCustomerTask(void *argument)
 
   uint32_t delay_until_next_customer_arrival;
   CUSTOMER_INFO customer_template;
-  osStatus_t queue_status;
 
   /* Infinite loop */
   for(;;)
   {
-	// Stop when the day ends.
+	// Stop generator when the day ends.
 	if(HAL_GetTick() >= (TOTAL_SIM_TIME_MS + SIMULATED_TIME_START))
 	{
 		osThreadSuspend(genCustomerHandle);
 	}
 
-	// New customer arrives every 1-4 minutes
+	// New customer arrives after a random time within a set interval.
 	delay_until_next_customer_arrival = rand_range(MIN_CUSTOMER_ARRIVAL_DELAY, MAX_CUSTOMER_ARRIVAL_DELAY);
 
-	// Generate a new customer with randomized service time
+	// Generate a new customer with randomized service time.
 	reset_and_init_customer(&customer_template);
 
-	// Send customer to queue to be picked up by tellers
-	queue_status = osMessageQueuePut(customerQueueHandle, &customer_template, 0U, osWaitForever);
+	// Send customer to queue to be picked up by tellers.
+	osMessageQueuePut(customerQueueHandle, &customer_template, 0U, osWaitForever);
 
-	if(queue_status == osOK)
-	{
+	// Record queue statistics.
+	max_customer_queue_depth = MAX(max_customer_queue_depth, osMessageQueueGetCount(customerQueueHandle));
 
-		// Record queue statistics
-		max_customer_queue_depth = MAX(max_customer_queue_depth, osMessageQueueGetCount(customerQueueHandle));
-
-		// Simulate time between customers
-		osDelay(delay_until_next_customer_arrival);
-	}
+	// Simulate time between customers.
+	osDelay(delay_until_next_customer_arrival);
   }
 
   /* USER CODE END StartGenCustomerTask */
@@ -801,7 +798,7 @@ void StartTeller01(void *argument)
   /* USER CODE BEGIN StartTeller01 */
   /* Infinite loop */
 
-  // All tellers share the same functionality
+  // All tellers share the same functionality.
   teller_functionality(&teller01_info, teller01Handle);
 
   /* USER CODE END StartTeller01 */
@@ -819,7 +816,7 @@ void StartTeller02(void *argument)
   /* USER CODE BEGIN StartTeller02 */
   /* Infinite loop */
 
-  // All tellers share the same functionality
+  // All tellers share the same functionality.
   teller_functionality(&teller02_info, teller02Handle);
 
   /* USER CODE END StartTeller02 */
@@ -837,7 +834,7 @@ void StartTeller03(void *argument)
   /* USER CODE BEGIN StartTeller03 */
   /* Infinite loop */
 
-  // All tellers share the same functionality
+  // All tellers share the same functionality.
   teller_functionality(&teller03_info, teller03Handle);
 
   /* USER CODE END StartTeller03 */
@@ -854,11 +851,19 @@ void StartSimMonitorInfo(void *argument)
 {
   /* USER CODE BEGIN StartSimMonitorInfo */
   /* Infinite loop */
-  uint8_t buffer[100];
-  int data_size;
   uint32_t sim_min;
   uint32_t sim_hours;
   uint32_t current_time_ms;
+
+  const char* teller01_info_str;
+  const char* teller02_info_str;
+  const char* teller03_info_str;
+
+  uint32_t total_customers_served;
+  uint32_t total_service_time;
+  uint32_t total_wait_time;
+  uint32_t total_num_waits;
+
   for(;;)
   {
 	current_time_ms = HAL_GetTick();
@@ -866,14 +871,132 @@ void StartSimMonitorInfo(void *argument)
 	sim_hours = MS_TO_SIM_HOURS(current_time_ms);
 	sim_min = MS_TO_SIM_MIN(current_time_ms);
 
-	data_size = sprintf((char*)buffer, "CURRENT TIME: %02ld:%02ld\r\nTELLER01 Status:\r\n", ((sim_hours + 8) % 12) + 1, sim_min % 60);
-	HAL_UART_Transmit(&huart2, buffer, data_size, 100U);
+	teller01_info_str = STATUS_TO_STR[teller01_info.status];
+	teller02_info_str = STATUS_TO_STR[teller02_info.status];
+	teller03_info_str = STATUS_TO_STR[teller03_info.status];
+
+	// [A: 1/2] Build up the real time data...
+	monitor_data_size = sprintf((char*)monitor_buffer, "\r\n\r\nCURRENT TIME: %02ld:%02ld\r\nCustomers in queue: %ld\r\nTeller01 status: %s\r\nTeller02 status: %s\r\nTeller03 status: %s\r\n\r\n\r\n",
+															(((sim_hours + 8) % 12) + 1),
+															(sim_min % 60),
+															osMessageQueueGetCount(customerQueueHandle),
+															teller01_info_str,
+															teller02_info_str,
+															teller03_info_str);
+
+	// [A: 2/2] ... and print it.
+	HAL_UART_Transmit(&huart2, monitor_buffer, monitor_data_size, 100U);
 
 	// Stop when the day ends.
 	if(HAL_GetTick() >= (TOTAL_SIM_TIME_MS + SIMULATED_TIME_START))
 	{
+		/* --- At the end of the day, gather all statistics --- */
+
+		// The total number of customers served during the day.
+		total_customers_served = teller01_info.total_customers_serviced +
+								 teller02_info.total_customers_serviced +
+								 teller03_info.total_customers_serviced;
+
+		monitor_data_size = sprintf((char*)monitor_buffer, "Total number of customers served during the day: %ld\r\n", total_customers_served);
+		HAL_UART_Transmit(&huart2, monitor_buffer, monitor_data_size, 100U);
+
+		// The number of customers served by Teller 1, by Teller 2, and by Teller 3.
+		monitor_data_size = sprintf((char*)monitor_buffer, "The number of customers served by\r\n\tTeller01: %d\r\n\tTeller02: %d\r\n\tTeller03: %d\r\n",
+				teller01_info.total_customers_serviced,
+				teller02_info.total_customers_serviced,
+				teller03_info.total_customers_serviced);
+
+		HAL_UART_Transmit(&huart2, monitor_buffer, monitor_data_size, 100U);
+
+		// The average time each customer spends waiting in the queue.
+		monitor_data_size = sprintf((char*)monitor_buffer, "The average time each customer spends waiting in the queue: %ld seconds\r\n",
+				MS_TO_SIM_SEC((total_customer_queue_time / total_customers_served)));
+
+		HAL_UART_Transmit(&huart2, monitor_buffer, monitor_data_size, 100U);
+
+		// The average time each customer spends with the teller.
+		total_service_time = teller01_info.total_service_time +
+							 teller02_info.total_service_time +
+							 teller03_info.total_service_time;
+
+		monitor_data_size = sprintf((char*)monitor_buffer, "The average time each customer spends with the teller: %ld seconds\r\n",
+				MS_TO_SIM_SEC(total_service_time / total_customers_served));
+		HAL_UART_Transmit(&huart2, monitor_buffer, monitor_data_size, 100U);
+
+		// The average time tellers wait for customers.
+		total_wait_time = teller01_info.total_wait_time +
+						  teller02_info.total_wait_time +
+						  teller03_info.total_wait_time;
+
+		total_num_waits = teller01_info.total_waits_taken +
+						  teller02_info.total_waits_taken +
+						  teller03_info.total_waits_taken;
+
+		monitor_data_size = sprintf((char*)monitor_buffer, "The average time tellers wait for customers: %ld seconds\r\n",
+				MS_TO_SIM_SEC(total_wait_time / total_num_waits));
+		HAL_UART_Transmit(&huart2, monitor_buffer, monitor_data_size, 100U);
+
+		// The maximum customer wait time in the queue.
+		monitor_data_size = sprintf((char*)monitor_buffer, "The maximum customer wait time in the queue: %d seconds\r\n",
+				max_customer_queue_time);
+		HAL_UART_Transmit(&huart2, monitor_buffer, monitor_data_size, 100U);
+
+		// The maximum wait time for tellers waiting for customers.
+		monitor_data_size = sprintf((char*)monitor_buffer, "The maximum wait time for tellers waiting for customers: %ld seconds\r\n",
+				MAX(MAX(teller01_info.max_wait_time, teller02_info.max_wait_time), teller03_info.max_wait_time));
+		HAL_UART_Transmit(&huart2, monitor_buffer, monitor_data_size, 100U);
+
+		// The maximum transaction time for the tellers.
+		monitor_data_size = sprintf((char*)monitor_buffer, "The maximum transaction time for the tellers: %ld seconds\r\n",
+				MAX(MAX(teller01_info.max_service_time, teller02_info.max_service_time), teller03_info.max_service_time));
+		HAL_UART_Transmit(&huart2, monitor_buffer, monitor_data_size, 100U);
+
+		// The maximum depth of the customer queue.
+		monitor_data_size = sprintf((char*)monitor_buffer, "The maximum depth of the customer queue: %d\r\n",
+				max_customer_queue_depth);
+		HAL_UART_Transmit(&huart2, monitor_buffer, monitor_data_size, 100U);
+
+		// The idle hook count.
+		monitor_data_size = sprintf((char*)monitor_buffer, "The idle hook count: %" PRIu64 "\r\n",
+				idle_hook_count);
+		HAL_UART_Transmit(&huart2, monitor_buffer, monitor_data_size, 100U);
+
+		// Number of breaks for each of the three tellers.
+		monitor_data_size = sprintf((char*)monitor_buffer, "Number of breaks for each of the three tellers\r\n\tTeller01: %d\r\n\tTeller02: %d\r\n\tTeller03: %d\r\n",
+				teller01_info.total_breaks_taken,
+				teller02_info.total_breaks_taken,
+				teller03_info.total_breaks_taken);
+
+		HAL_UART_Transmit(&huart2, monitor_buffer, monitor_data_size, 100U);
+
+		// Average break time for each of the three tellers.
+		monitor_data_size = sprintf((char*)monitor_buffer, "Average break time for each of the three tellers\r\n\tTeller01: %d\r\n\tTeller02: %d\r\n\tTeller03: %d\r\n",
+				teller01_info.total_break_time / teller01_info.total_breaks_taken,
+				teller02_info.total_break_time / teller02_info.total_breaks_taken,
+				teller03_info.total_break_time / teller03_info.total_breaks_taken);
+
+		HAL_UART_Transmit(&huart2, monitor_buffer, monitor_data_size, 100U);
+
+		// Longest break time for each of the three tellers
+		monitor_data_size = sprintf((char*)monitor_buffer, "Longest break time for each of the three tellers\r\n\tTeller01: %ld\r\n\tTeller02: %ld\r\n\tTeller03: %ld\r\n",
+				teller01_info.max_break_time,
+				teller02_info.max_break_time,
+				teller03_info.max_break_time);
+
+		HAL_UART_Transmit(&huart2, monitor_buffer, monitor_data_size, 100U);
+
+		// Shortest break time for each of the three tellers
+		monitor_data_size = sprintf((char*)monitor_buffer, "Shortest break time for each of the three tellers\r\n\tTeller01: %ld\r\n\tTeller02: %ld\r\n\tTeller03: %ld\r\n",
+				teller01_info.min_break_time,
+				teller02_info.min_break_time,
+				teller03_info.min_break_time);
+
+		HAL_UART_Transmit(&huart2, monitor_buffer, monitor_data_size, 100U);
+
 		osThreadSuspend(simMonitorInfoHandle);
 	}
+
+	// Update monitor info every one minute of simulated time.
     osDelay(100);
   }
   /* USER CODE END StartSimMonitorInfo */

@@ -42,7 +42,7 @@ uint64_t rand_range(uint64_t start_inclusive, uint64_t end_inclusive)
 	uint64_t rand_num;
 	do
 	{
-		rand_num = (generate_random_u64() % end_inclusive) + start_inclusive + 1;
+		rand_num = start_inclusive + generate_random_u64() / ((uint64_t)(-1) / (end_inclusive - start_inclusive + 1) + 1);
 	}
 	while(rand_num > end_inclusive);
 

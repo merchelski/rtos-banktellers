@@ -20,17 +20,18 @@ uint16_t max_customer_queue_depth = 0;
 void init_teller(TELLER_INFO* teller)
 {
 	teller->max_wait_time = 0;
-	teller->max_transaction_time = 0;
+	teller->max_service_time = 0;
 	teller->max_break_time = 0;
-	teller->last_waiting_start_time = 0;
+	teller->min_break_time = (uint32_t)(-1);
 	teller->total_service_time = 0;
 	teller->total_wait_time = 0;
+	teller->total_waits_taken = 0;
 	teller->total_break_time = 0;
 	teller->total_breaks_taken = 0;
 	teller->total_customers_serviced = 0;
 	teller->next_available_natural_break_time = rand_range(MIN_TELLER_BREAK_WAIT, MAX_TELLER_BREAK_WAIT);
-	teller->is_on_forced_break = false;
-	teller->waiting_flag = false;
+	teller->status = status_waiting;
+	teller->forced_break_flag = false;
 
 }
 
