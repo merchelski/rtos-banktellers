@@ -42,16 +42,23 @@
 
 /* Private macro -------------------------------------------------------------*/
 /* USER CODE BEGIN PM */
-#define TOTAL_TIME_IN_DAY_MIN ((7*60UL))
-
 #define SIM_MIN_TO_MS(minutes) ((minutes) * (100UL))
-#define SIM_SEC_TO_MS(sec) (((sec) * 5) / 3UL)
+#define TIME_IN_WORK_DAY_MIN ((7*60UL))
+#define TIME_IN_WORK_DAY_MS (SIM_MIN_TO_MS(TIME_IN_WORK_DAY_MIN))
 
 #define MS_TO_SIM_SEC(ms) (((ms) * 3) / 5UL)
 #define MS_TO_SIM_MIN(ms) ((ms) / 100UL)
 #define MS_TO_SIM_HOURS(ms) ((ms) / (100*60UL))
 
-#define TOTAL_SIM_TIME_MS (SIM_MIN_TO_MS(TOTAL_TIME_IN_DAY_MIN))
+#define TELLER01_FORCE_BREAK_BUTTON_PORT (S1_SHLD_BUTTON_GPIO_Port)
+#define TELLER02_FORCE_BREAK_BUTTON_PORT (S2_SHLD_BUTTON_GPIO_Port)
+#define TELLER03_FORCE_BREAK_BUTTON_PORT (S3_SHLD_BUTTON_GPIO_Port)
+
+#define TELLER01_FORCE_BREAK_BUTTON_PIN (S1_SHLD_BUTTON_Pin)
+#define TELLER02_FORCE_BREAK_BUTTON_PIN (S2_SHLD_BUTTON_Pin)
+#define TELLER03_FORCE_BREAK_BUTTON_PIN (S3_SHLD_BUTTON_Pin)
+
+#define FORCE_BREAK_BUTTON_PRESSED (GPIO_PIN_RESET)
 
 #define NUM_SEGMENT_DIGITS (4)
 
@@ -64,6 +71,7 @@
 	({ __typeof__ (a) _a = (a); \
 	   __typeof__ (b) _b = (b); \
 	 _a < _b ? _a : _b; })
+
 
 /* USER CODE END PM */
 
@@ -559,6 +567,16 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
+
+/**
+* @brief Implements the teller's functionality as described in the lab outline.
+*
+* @param teller_info: Data structure holding information about the teller - used to calculate statistics later.
+* @param tellerHandler: Handler for the task responsible for the specific instance of teller.
+* @param TELLER_GPIO_PORT: The port of the GPIO pin which controls the forced break functionality.
+* @param TELLER_GPIO_PIN: The GPIO pin which holds the value of the forced break button.n.
+* @retval None
+*/
 void teller_functionality(TELLER_INFO* teller_info, osThreadId_t tellerHandler, GPIO_TypeDef* TELLER_GPIO_PORT, uint16_t TELLER_GPIO_PIN)
 {
 	CUSTOMER_INFO current_customer;
@@ -574,7 +592,7 @@ void teller_functionality(TELLER_INFO* teller_info, osThreadId_t tellerHandler, 
 		teller_info->status = status_working;
 
 		// Stop teller when the day ends.
-		if((osMessageQueueGetCount(customerQueueHandle) == 0) && (HAL_GetTick() >= (TOTAL_SIM_TIME_MS + SIMULATED_TIME_START)))
+		if((osMessageQueueGetCount(customerQueueHandle) == 0) && (HAL_GetTick() >= (TIME_IN_WORK_DAY_MS + SIMULATED_TIME_START)))
 		{
 			teller_info->status = status_done_for_the_day;
 			osThreadSuspend(tellerHandler);
@@ -629,14 +647,14 @@ void teller_functionality(TELLER_INFO* teller_info, osThreadId_t tellerHandler, 
 		for(int i = 0; i < 2; i++) // check twice in case of chaining of natural break -> forced break
 		{
 			// Forced break -> takes priority over natural break.
-			if(HAL_GPIO_ReadPin(TELLER_GPIO_PORT, TELLER_GPIO_PIN) == GPIO_PIN_RESET)
+			if(HAL_GPIO_ReadPin(TELLER_GPIO_PORT, TELLER_GPIO_PIN) == FORCE_BREAK_BUTTON_PRESSED)
 			{
 				// Grab reference point
 				forced_break_start_time = HAL_GetTick();
 				teller_info->status = status_on_break;
 
 				// Stay until the forced break is released
-				while(HAL_GPIO_ReadPin(TELLER_GPIO_PORT, TELLER_GPIO_PIN) == GPIO_PIN_RESET)
+				while(HAL_GPIO_ReadPin(TELLER_GPIO_PORT, TELLER_GPIO_PIN) == FORCE_BREAK_BUTTON_PRESSED)
 				{
 					osDelay(1);
 				}
@@ -680,7 +698,7 @@ void teller_functionality(TELLER_INFO* teller_info, osThreadId_t tellerHandler, 
 
 /* USER CODE BEGIN Header_StartUpdateSegment */
 /**
-* @brief Function implementing the updateSegment thread.
+* @brief Function implementing the updateSegment thread. Displays the current customers queue count on the 7-segment display.
 * @param argument: Not used
 * @retval None
 */
@@ -697,7 +715,7 @@ void StartUpdateSegment(void *argument)
 	  					(eTaskGetState(teller02Handle) == eSuspended) ||
 						(eTaskGetState(teller03Handle) == eSuspended));
 
-	if(work_is_done && (HAL_GetTick() >= (TOTAL_SIM_TIME_MS + SIMULATED_TIME_START)))
+	if(work_is_done && (HAL_GetTick() >= (TIME_IN_WORK_DAY_MS + SIMULATED_TIME_START)))
 	{
 		osThreadSuspend(updateSegmentHandle);
 	}
@@ -713,7 +731,8 @@ void StartUpdateSegment(void *argument)
 
 /* USER CODE BEGIN Header_StartGenCustomerTask */
 /**
-* @brief Function implementing the genCustomer thread.
+* @brief Function implementing the genCustomer thread. Generates customers at intervals specified by the lab outline and
+* 	captures statistics needed for later report.
 * @param argument: Not used
 * @retval None
 */
@@ -730,7 +749,7 @@ void StartGenCustomerTask(void *argument)
   {
 	// Stop generator when the day ends.
 
-	if(HAL_GetTick() >= (TOTAL_SIM_TIME_MS + SIMULATED_TIME_START))
+	if(HAL_GetTick() >= (TIME_IN_WORK_DAY_MS + SIMULATED_TIME_START))
 	{
 		osThreadSuspend(genCustomerHandle);
 	}
@@ -756,7 +775,7 @@ void StartGenCustomerTask(void *argument)
 
 /* USER CODE BEGIN Header_StartTeller01 */
 /**
-* @brief Function implementing the teller01 thread.
+* @brief Function implementing the teller01 thread. Shares functionality with other tellers.
 * @param argument: Not used
 * @retval None
 */
@@ -767,14 +786,14 @@ void StartTeller01(void *argument)
   /* Infinite loop */
 
   // All tellers share the same functionality.
-  teller_functionality(&teller01_info, teller01Handle, S1_SHLD_BUTTON_GPIO_Port, S1_SHLD_BUTTON_Pin);
+  teller_functionality(&teller01_info, teller01Handle, TELLER01_FORCE_BREAK_BUTTON_PORT, TELLER01_FORCE_BREAK_BUTTON_PIN);
 
   /* USER CODE END StartTeller01 */
 }
 
 /* USER CODE BEGIN Header_StartTeller02 */
 /**
-* @brief Function implementing the teller02 thread.
+* @brief Function implementing the teller02 thread. Shares functionality with other tellers.
 * @param argument: Not used
 * @retval None
 */
@@ -785,14 +804,14 @@ void StartTeller02(void *argument)
   /* Infinite loop */
 
   // All tellers share the same functionality.
-  teller_functionality(&teller02_info, teller02Handle, S2_SHLD_BUTTON_GPIO_Port, S2_SHLD_BUTTON_Pin);
+  teller_functionality(&teller02_info, teller02Handle, TELLER02_FORCE_BREAK_BUTTON_PORT, TELLER02_FORCE_BREAK_BUTTON_PIN);
 
   /* USER CODE END StartTeller02 */
 }
 
 /* USER CODE BEGIN Header_StartTeller03 */
 /**
-* @brief Function implementing the teller03 thread.
+* @brief Function implementing the teller03 thread. Shares functionality with other tellers.
 * @param argument: Not used
 * @retval None
 */
@@ -803,14 +822,15 @@ void StartTeller03(void *argument)
   /* Infinite loop */
 
   // All tellers share the same functionality.
-  teller_functionality(&teller03_info, teller03Handle, S3_SHLD_BUTTON_GPIO_Port, S3_SHLD_BUTTON_Pin);
+  teller_functionality(&teller03_info, teller03Handle, TELLER03_FORCE_BREAK_BUTTON_PORT, TELLER03_FORCE_BREAK_BUTTON_PIN);
 
   /* USER CODE END StartTeller03 */
 }
 
 /* USER CODE BEGIN Header_StartSimMonitorInfo */
 /**
-* @brief Function implementing the simMonitorInfo thread.
+* @brief Function implementing the simMonitorInfo thread. Prints real time info about the status of tellers and customer queue to the
+* 	display. Also is responsible for generating the statistics report at the end of the day.
 * @param argument: Not used
 * @retval None
 */
@@ -859,12 +879,14 @@ void StartSimMonitorInfo(void *argument)
 	// [A: 2/2] ... and print it.
 	HAL_UART_Transmit(&huart2, monitor_buffer, monitor_data_size, 100U);
 
-	// Stop when the day ends and all work is done.
+	// Work is done when there are no more customers in the queue and all of the tellers are done working.
 	bool work_is_done = (osMessageQueueGetCount(customerQueueHandle) == 0) &&
 							((eTaskGetState(teller01Handle) == eSuspended) ||
 		  					(eTaskGetState(teller02Handle) == eSuspended) ||
 							(eTaskGetState(teller03Handle) == eSuspended));
-	if(work_is_done && (HAL_GetTick() >= (TOTAL_SIM_TIME_MS + SIMULATED_TIME_START)))
+
+	// Stop when the day ends and all work is done.
+	if(work_is_done && (HAL_GetTick() >= (TIME_IN_WORK_DAY_MS + SIMULATED_TIME_START)))
 	{
 		/* --- At the end of the day, gather all statistics --- */
 

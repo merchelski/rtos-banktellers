@@ -18,6 +18,12 @@ uint32_t max_customer_queue_time = 0;
 uint32_t max_customer_queue_depth = 0;
 
 
+/**
+* @brief Initializes a teller.
+*
+* @param teller: Data structure holding information about the teller - used to calculate statistics later..
+* @retval None
+*/
 void init_teller(TELLER_INFO* teller)
 {
 	teller->max_wait_time = 0;
@@ -36,6 +42,12 @@ void init_teller(TELLER_INFO* teller)
 
 }
 
+/**
+* @brief Initializes a customer.Generates the service time based on a random uniform distribution as outlined by the lab.
+*
+* @param customer: Data structure holding information about the customer.
+* @retval None
+*/
 void reset_and_init_customer(CUSTOMER_INFO* customer)
 {
 	customer->service_time = rand_range(MIN_SERVICE_TIME, MAX_SERVICE_TIME);

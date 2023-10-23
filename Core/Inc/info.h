@@ -22,8 +22,10 @@
 #define MIN_SERVICE_TIME ((5*30) / 3UL)
 #define MAX_SERVICE_TIME ((5*8*60) / 3UL)
 
+// Determines what amount of time constitutes a "wait" having occurred by a teller.
 #define TELLER_WAIT_TOLERANCE (10)
 
+// Statistics for report.
 extern uint64_t idle_hook_count;
 extern uint32_t total_customer_queue_time;
 extern uint32_t max_customer_queue_time;

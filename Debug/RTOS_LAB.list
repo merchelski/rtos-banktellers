@@ -29,23 +29,23 @@ Idx Name          Size      VMA       LMA       File off  Algn
                   CONTENTS, READONLY
  12 .comment      00000043  00000000  00000000  0002071c  2**0
                   CONTENTS, READONLY
- 13 .debug_info   0001c92a  00000000  00000000  0002075f  2**0
+ 13 .debug_info   0001c92b  00000000  00000000  0002075f  2**0
                   CONTENTS, READONLY, DEBUGGING, OCTETS
- 14 .debug_abbrev 00003bfd  00000000  00000000  0003d089  2**0
+ 14 .debug_abbrev 00003bfd  00000000  00000000  0003d08a  2**0
                   CONTENTS, READONLY, DEBUGGING, OCTETS
  15 .debug_aranges 00001800  00000000  00000000  00040c88  2**3
                   CONTENTS, READONLY, DEBUGGING, OCTETS
  16 .debug_rnglists 00001291  00000000  00000000  00042488  2**0
                   CONTENTS, READONLY, DEBUGGING, OCTETS
- 17 .debug_macro  0002a843  00000000  00000000  00043719  2**0
+ 17 .debug_macro  0002a867  00000000  00000000  00043719  2**0
                   CONTENTS, READONLY, DEBUGGING, OCTETS
- 18 .debug_line   00019e67  00000000  00000000  0006df5c  2**0
+ 18 .debug_line   00019e67  00000000  00000000  0006df80  2**0
                   CONTENTS, READONLY, DEBUGGING, OCTETS
- 19 .debug_str    001002cf  00000000  00000000  00087dc3  2**0
+ 19 .debug_str    00100427  00000000  00000000  00087de7  2**0
                   CONTENTS, READONLY, DEBUGGING, OCTETS
- 20 .debug_frame  00007768  00000000  00000000  00188094  2**2
+ 20 .debug_frame  00007768  00000000  00000000  00188210  2**2
                   CONTENTS, READONLY, DEBUGGING, OCTETS
- 21 .debug_line_str 00000066  00000000  00000000  0018f7fc  2**0
+ 21 .debug_line_str 00000066  00000000  00000000  0018f978  2**0
                   CONTENTS, READONLY, DEBUGGING, OCTETS
 
 Disassembly of section .text:
@@ -2215,8 +2215,10 @@ static void MX_GPIO_Init(void)
  80014bc:	48000800 	.word	0x48000800
 
 080014c0 <teller_functionality>:
-
-/* USER CODE BEGIN 4 */
+* @param TELLER_GPIO_PORT: The port of the GPIO pin which controls the forced break functionality.
+* @param TELLER_GPIO_PIN: The GPIO pin which holds the value of the forced break button.n.
+* @retval None
+*/
 void teller_functionality(TELLER_INFO* teller_info, osThreadId_t tellerHandler, GPIO_TypeDef* TELLER_GPIO_PORT, uint16_t TELLER_GPIO_PIN)
 {
  80014c0:	b590      	push	{r4, r7, lr}
@@ -2237,7 +2239,7 @@ void teller_functionality(TELLER_INFO* teller_info, osThreadId_t tellerHandler, 
  80014d2:	f883 2021 	strb.w	r2, [r3, #33]	; 0x21
 
 		// Stop teller when the day ends.
-		if((osMessageQueueGetCount(customerQueueHandle) == 0) && (HAL_GetTick() >= (TOTAL_SIM_TIME_MS + SIMULATED_TIME_START)))
+		if((osMessageQueueGetCount(customerQueueHandle) == 0) && (HAL_GetTick() >= (TIME_IN_WORK_DAY_MS + SIMULATED_TIME_START)))
  80014d6:	4b7c      	ldr	r3, [pc, #496]	; (80016c8 <teller_functionality+0x208>)
  80014d8:	681b      	ldr	r3, [r3, #0]
  80014da:	4618      	mov	r0, r3
@@ -2426,7 +2428,7 @@ void teller_functionality(TELLER_INFO* teller_info, osThreadId_t tellerHandler, 
  8001606:	e0c1      	b.n	800178c <teller_functionality+0x2cc>
 		{
 			// Forced break -> takes priority over natural break.
-			if(HAL_GPIO_ReadPin(TELLER_GPIO_PORT, TELLER_GPIO_PIN) == GPIO_PIN_RESET)
+			if(HAL_GPIO_ReadPin(TELLER_GPIO_PORT, TELLER_GPIO_PIN) == FORCE_BREAK_BUTTON_PRESSED)
  8001608:	887b      	ldrh	r3, [r7, #2]
  800160a:	4619      	mov	r1, r3
  800160c:	6878      	ldr	r0, [r7, #4]
@@ -2445,13 +2447,13 @@ void teller_functionality(TELLER_INFO* teller_info, osThreadId_t tellerHandler, 
  8001622:	f883 2021 	strb.w	r2, [r3, #33]	; 0x21
 
 				// Stay until the forced break is released
-				while(HAL_GPIO_ReadPin(TELLER_GPIO_PORT, TELLER_GPIO_PIN) == GPIO_PIN_RESET)
+				while(HAL_GPIO_ReadPin(TELLER_GPIO_PORT, TELLER_GPIO_PIN) == FORCE_BREAK_BUTTON_PRESSED)
  8001626:	e002      	b.n	800162e <teller_functionality+0x16e>
 				{
 					osDelay(1);
  8001628:	2001      	movs	r0, #1
  800162a:	f004 fa01 	bl	8005a30 <osDelay>
-				while(HAL_GPIO_ReadPin(TELLER_GPIO_PORT, TELLER_GPIO_PIN) == GPIO_PIN_RESET)
+				while(HAL_GPIO_ReadPin(TELLER_GPIO_PORT, TELLER_GPIO_PIN) == FORCE_BREAK_BUTTON_PRESSED)
  800162e:	887b      	ldrh	r3, [r7, #2]
  8001630:	4619      	mov	r1, r3
  8001632:	6878      	ldr	r0, [r7, #4]
@@ -2700,7 +2702,7 @@ void StartUpdateSegment(void *argument)
  80017ea:	f003 0301 	and.w	r3, r3, #1
  80017ee:	73fb      	strb	r3, [r7, #15]
 
-	if(work_is_done && (HAL_GetTick() >= (TOTAL_SIM_TIME_MS + SIMULATED_TIME_START)))
+	if(work_is_done && (HAL_GetTick() >= (TIME_IN_WORK_DAY_MS + SIMULATED_TIME_START)))
  80017f0:	7bfb      	ldrb	r3, [r7, #15]
  80017f2:	2b00      	cmp	r3, #0
  80017f4:	d00e      	beq.n	8001814 <StartUpdateSegment+0x7c>
@@ -2760,7 +2762,7 @@ void StartGenCustomerTask(void *argument)
   {
 	// Stop generator when the day ends.
 
-	if(HAL_GetTick() >= (TOTAL_SIM_TIME_MS + SIMULATED_TIME_START))
+	if(HAL_GetTick() >= (TIME_IN_WORK_DAY_MS + SIMULATED_TIME_START))
  8001850:	f000 ff32 	bl	80026b8 <HAL_GetTick>
  8001854:	4602      	mov	r2, r0
  8001856:	4b1e      	ldr	r3, [pc, #120]	; (80018d0 <StartGenCustomerTask+0x88>)
@@ -2826,7 +2828,7 @@ void StartGenCustomerTask(void *argument)
 	osDelay(delay_until_next_customer_arrival);
  80018c6:	69f8      	ldr	r0, [r7, #28]
  80018c8:	f004 f8b2 	bl	8005a30 <osDelay>
-	if(HAL_GetTick() >= (TOTAL_SIM_TIME_MS + SIMULATED_TIME_START))
+	if(HAL_GetTick() >= (TIME_IN_WORK_DAY_MS + SIMULATED_TIME_START))
  80018cc:	e7c0      	b.n	8001850 <StartGenCustomerTask+0x8>
  80018ce:	bf00      	nop
  80018d0:	20000818 	.word	0x20000818
@@ -2849,7 +2851,7 @@ void StartTeller01(void *argument)
   /* Infinite loop */
 
   // All tellers share the same functionality.
-  teller_functionality(&teller01_info, teller01Handle, S1_SHLD_BUTTON_GPIO_Port, S1_SHLD_BUTTON_Pin);
+  teller_functionality(&teller01_info, teller01Handle, TELLER01_FORCE_BREAK_BUTTON_PORT, TELLER01_FORCE_BREAK_BUTTON_PIN);
  80018e8:	4b05      	ldr	r3, [pc, #20]	; (8001900 <StartTeller01+0x20>)
  80018ea:	6819      	ldr	r1, [r3, #0]
  80018ec:	2302      	movs	r3, #2
@@ -2881,7 +2883,7 @@ void StartTeller02(void *argument)
   /* Infinite loop */
 
   // All tellers share the same functionality.
-  teller_functionality(&teller02_info, teller02Handle, S2_SHLD_BUTTON_GPIO_Port, S2_SHLD_BUTTON_Pin);
+  teller_functionality(&teller02_info, teller02Handle, TELLER02_FORCE_BREAK_BUTTON_PORT, TELLER02_FORCE_BREAK_BUTTON_PIN);
  8001910:	4b05      	ldr	r3, [pc, #20]	; (8001928 <StartTeller02+0x20>)
  8001912:	6819      	ldr	r1, [r3, #0]
  8001914:	2310      	movs	r3, #16
@@ -2913,7 +2915,7 @@ void StartTeller03(void *argument)
   /* Infinite loop */
 
   // All tellers share the same functionality.
-  teller_functionality(&teller03_info, teller03Handle, S3_SHLD_BUTTON_GPIO_Port, S3_SHLD_BUTTON_Pin);
+  teller_functionality(&teller03_info, teller03Handle, TELLER03_FORCE_BREAK_BUTTON_PORT, TELLER03_FORCE_BREAK_BUTTON_PIN);
  8001938:	4b05      	ldr	r3, [pc, #20]	; (8001950 <StartTeller03+0x20>)
  800193a:	6819      	ldr	r1, [r3, #0]
  800193c:	2301      	movs	r3, #1
@@ -3081,7 +3083,7 @@ void StartSimMonitorInfo(void *argument)
  8001a5a:	4821      	ldr	r0, [pc, #132]	; (8001ae0 <StartSimMonitorInfo+0x184>)
  8001a5c:	f003 f94e 	bl	8004cfc <HAL_UART_Transmit>
 
-	// Stop when the day ends and all work is done.
+	// Work is done when there are no more customers in the queue and all of the tellers are done working.
 	bool work_is_done = (osMessageQueueGetCount(customerQueueHandle) == 0) &&
  8001a60:	4b17      	ldr	r3, [pc, #92]	; (8001ac0 <StartSimMonitorInfo+0x164>)
  8001a62:	681b      	ldr	r3, [r3, #0]
@@ -3144,7 +3146,9 @@ void StartSimMonitorInfo(void *argument)
  8001af6:	f897 303f 	ldrb.w	r3, [r7, #63]	; 0x3f
  8001afa:	f003 0301 	and.w	r3, r3, #1
  8001afe:	f887 303f 	strb.w	r3, [r7, #63]	; 0x3f
-	if(work_is_done && (HAL_GetTick() >= (TOTAL_SIM_TIME_MS + SIMULATED_TIME_START)))
+
+	// Stop when the day ends and all work is done.
+	if(work_is_done && (HAL_GetTick() >= (TIME_IN_WORK_DAY_MS + SIMULATED_TIME_START)))
  8001b02:	f897 303f 	ldrb.w	r3, [r7, #63]	; 0x3f
  8001b06:	2b00      	cmp	r3, #0
  8001b08:	f000 823a 	beq.w	8001f80 <StartSimMonitorInfo+0x624>
