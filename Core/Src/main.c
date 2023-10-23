@@ -336,7 +336,7 @@ int main(void)
 //  osThreadSuspend(genCustomerHandle);
 //  osThreadSuspend(teller01Handle);
 //  osThreadSuspend(teller02Handle);
-  osThreadSuspend(teller03Handle);
+//  osThreadSuspend(teller03Handle);
 //  osThreadSuspend(updateSegmentHandle);
 //  osThreadSuspend(simMonitorInfoHandle);
 
@@ -597,14 +597,6 @@ void teller_functionality(TELLER_INFO* teller_info, osThreadId_t tellerHandler, 
 
 		// This is time the customer had to wait in the queue before being serviced.
 		customer_time_spent_in_queue = HAL_GetTick() - current_customer.time_entered_queue;
-//		if(HAL_GetTick() > current_customer.time_entered_queue)
-//		{
-//			customer_time_spent_in_queue = HAL_GetTick() - current_customer.time_entered_queue;
-//		}
-//		else
-//		{
-//			customer_time_spent_in_queue = customer_time_spent_in_queue - HAL_GetTick();
-//		}
 
 		// [B: 1/2] If the time discrepancy is too high, it probably means the teller had to wait...
 		if(wait_discrepancy > TELLER_WAIT_TOLERANCE)
@@ -852,6 +844,8 @@ void StartSimMonitorInfo(void *argument)
 	teller02_info_str = STATUS_TO_STR[teller02_info.status];
 	teller03_info_str = STATUS_TO_STR[teller03_info.status];
 
+	max_customer_queue_depth = MAX(max_customer_queue_depth, osMessageQueueGetCount(customerQueueHandle));
+
 	// [A: 1/2] Build up the real time data...
 	monitor_data_size = sprintf((char*)monitor_buffer, "\r\n\r\nCURRENT TIME: %02ld:%02ld%s\r\nCustomers in queue: %ld\r\nTeller01 status: %s\r\nTeller02 status: %s\r\nTeller03 status: %s\r\n\r\n\r\n",
 															(((sim_hours + 8) % 12) + 1),
@@ -873,6 +867,9 @@ void StartSimMonitorInfo(void *argument)
 	if(work_is_done && (HAL_GetTick() >= (TOTAL_SIM_TIME_MS + SIMULATED_TIME_START)))
 	{
 		/* --- At the end of the day, gather all statistics --- */
+
+		monitor_data_size = sprintf((char*)monitor_buffer, "---- WORK DAY STATISTICS ----\r\n\r\n");
+		HAL_UART_Transmit(&huart2, monitor_buffer, monitor_data_size, 100U);
 
 		// The total number of customers served during the day.
 		total_customers_served = teller01_info.total_customers_serviced +
@@ -919,8 +916,8 @@ void StartSimMonitorInfo(void *argument)
 		HAL_UART_Transmit(&huart2, monitor_buffer, monitor_data_size, 100U);
 
 		// The maximum customer wait time in the queue.
-		monitor_data_size = sprintf((char*)monitor_buffer, "The maximum customer wait time in the queue: %d seconds\r\n",
-				max_customer_queue_time);
+		monitor_data_size = sprintf((char*)monitor_buffer, "The maximum customer wait time in the queue: %ld seconds\r\n",
+				MS_TO_SIM_SEC(max_customer_queue_time));
 		HAL_UART_Transmit(&huart2, monitor_buffer, monitor_data_size, 100U);
 
 		// The maximum wait time for tellers waiting for customers.
@@ -935,7 +932,7 @@ void StartSimMonitorInfo(void *argument)
 
 		// The maximum depth of the customer queue.
 		monitor_data_size = sprintf((char*)monitor_buffer, "The maximum depth of the customer queue: %ld\r\n",
-				MS_TO_SIM_SEC(max_customer_queue_depth));
+				max_customer_queue_depth);
 		HAL_UART_Transmit(&huart2, monitor_buffer, monitor_data_size, 100U);
 
 		// The idle hook count.
@@ -952,7 +949,7 @@ void StartSimMonitorInfo(void *argument)
 		HAL_UART_Transmit(&huart2, monitor_buffer, monitor_data_size, 100U);
 
 		// Average break time for each of the three tellers.
-		monitor_data_size = sprintf((char*)monitor_buffer, "Average break time for each of the three tellers\r\n\tTeller01: %ld\r\n\tTeller02: %ld\r\n\tTeller03: %ld\r\n",
+		monitor_data_size = sprintf((char*)monitor_buffer, "Average break time for each of the three tellers\r\n\tTeller01: %ld seconds\r\n\tTeller02: %ld seconds\r\n\tTeller03: %ld seconds\r\n",
 				MS_TO_SIM_SEC(teller01_info.total_break_time / teller01_info.total_breaks_taken),
 				MS_TO_SIM_SEC(teller02_info.total_break_time / teller02_info.total_breaks_taken),
 				MS_TO_SIM_SEC(teller03_info.total_break_time / teller03_info.total_breaks_taken));
@@ -960,7 +957,7 @@ void StartSimMonitorInfo(void *argument)
 		HAL_UART_Transmit(&huart2, monitor_buffer, monitor_data_size, 100U);
 
 		// Longest break time for each of the three tellers
-		monitor_data_size = sprintf((char*)monitor_buffer, "Longest break time for each of the three tellers\r\n\tTeller01: %ld\r\n\tTeller02: %ld\r\n\tTeller03: %ld\r\n",
+		monitor_data_size = sprintf((char*)monitor_buffer, "Longest break time for each of the three tellers\r\n\tTeller01: %ld seconds\r\n\tTeller02: %ld seconds\r\n\tTeller03: %ld seconds\r\n",
 				MS_TO_SIM_SEC(teller01_info.max_break_time),
 				MS_TO_SIM_SEC(teller02_info.max_break_time),
 				MS_TO_SIM_SEC(teller03_info.max_break_time));
@@ -968,7 +965,7 @@ void StartSimMonitorInfo(void *argument)
 		HAL_UART_Transmit(&huart2, monitor_buffer, monitor_data_size, 100U);
 
 		// Shortest break time for each of the three tellers
-		monitor_data_size = sprintf((char*)monitor_buffer, "Shortest break time for each of the three tellers\r\n\tTeller01: %ld\r\n\tTeller02: %ld\r\n\tTeller03: %ld\r\n",
+		monitor_data_size = sprintf((char*)monitor_buffer, "Shortest break time for each of the three tellers\r\n\tTeller01: %ld seconds\r\n\tTeller02: %ld seconds\r\n\tTeller03: %ld seconds\r\n",
 				MS_TO_SIM_SEC(teller01_info.min_break_time),
 				MS_TO_SIM_SEC(teller02_info.min_break_time),
 				MS_TO_SIM_SEC(teller03_info.min_break_time));

@@ -13,9 +13,9 @@
 #include "stm32l4xx_hal.h"
 
 uint64_t idle_hook_count = 0;
-uint16_t total_customer_queue_time = 0;
-uint16_t max_customer_queue_time = 0;
-uint16_t max_customer_queue_depth = 0;
+uint32_t total_customer_queue_time = 0;
+uint32_t max_customer_queue_time = 0;
+uint32_t max_customer_queue_depth = 0;
 
 
 void init_teller(TELLER_INFO* teller)

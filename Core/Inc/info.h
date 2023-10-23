@@ -25,9 +25,9 @@
 #define TELLER_WAIT_TOLERANCE (10)
 
 extern uint64_t idle_hook_count;
-extern uint16_t total_customer_queue_time;
-extern uint16_t max_customer_queue_time;
-extern uint16_t max_customer_queue_depth;
+extern uint32_t total_customer_queue_time;
+extern uint32_t max_customer_queue_time;
+extern uint32_t max_customer_queue_depth;
 
 enum enum_teller_status
 {
