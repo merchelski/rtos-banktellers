@@ -45,6 +45,8 @@ typedef struct TELLER_INFO_STRUCT
 	uint32_t max_break_time;
 	uint32_t min_break_time;
 
+	uint32_t next_available_natural_break_time;
+
 	uint16_t total_service_time;
 	uint16_t total_customers_serviced;
 
@@ -53,8 +55,6 @@ typedef struct TELLER_INFO_STRUCT
 
 	uint16_t total_wait_time;
 	uint16_t total_waits_taken;
-
-	uint16_t next_available_natural_break_time;
 
 	bool forced_break_flag;
 

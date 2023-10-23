@@ -179,7 +179,7 @@ void StartTeller03(void *argument);
 void StartSimMonitorInfo(void *argument);
 
 /* USER CODE BEGIN PFP */
-void teller_functionality(TELLER_INFO* teller_info, osThreadId_t tellerHandler);
+void teller_functionality(TELLER_INFO* teller_info, osThreadId_t tellerHandler, GPIO_TypeDef* TELLER_GPIO_PORT, uint16_t TELLER_GPIO_PIN);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -190,31 +190,31 @@ void teller_functionality(TELLER_INFO* teller_info, osThreadId_t tellerHandler);
 * @param GPIO_Pin: The GPIO_Pin of the button that generated the interrupt.
 * @retval None
 */
-void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
-{
-	TELLER_INFO* teller;
-
-	// First button corresponds to teller01.
-	if(GPIO_Pin == S1_SHLD_BUTTON_Pin)
-	{
-		teller = &teller01_info;
-	}
-
-	// Second button corresponds to teller02.
-	if(GPIO_Pin == S2_SHLD_BUTTON_Pin)
-	{
-		teller = &teller02_info;
-	}
-
-	// Third button corresponds to teller03.
-	if(GPIO_Pin == S3_SHLD_BUTTON_Pin)
-	{
-		teller = &teller03_info;
-	}
-
-	// Callback is triggered by both the rising AND falling edge, so we just toggle.
-	teller->forced_break_flag ^= 1;
-}
+//void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
+//{
+//	TELLER_INFO* teller;
+//
+//	// First button corresponds to teller01.
+//	if(GPIO_Pin == S1_SHLD_BUTTON_Pin)
+//	{
+//		teller = &teller01_info;
+//	}
+//
+//	// Second button corresponds to teller02.
+//	if(GPIO_Pin == S2_SHLD_BUTTON_Pin)
+//	{
+//		teller = &teller02_info;
+//	}
+//
+//	// Third button corresponds to teller03.
+//	if(GPIO_Pin == S3_SHLD_BUTTON_Pin)
+//	{
+//		teller = &teller03_info;
+//	}
+//
+//	// Callback is triggered by both the rising AND falling edge, so we just toggle.
+//	teller->forced_break_flag ^= 1;
+//}
 
 /**
 * @brief Sets 7-segment pin values using a shift register.
@@ -366,7 +366,7 @@ int main(void)
   /* ----- SUSPEND THREADS -----*/
 //  osThreadSuspend(genCustomerHandle);
 //  osThreadSuspend(teller01Handle);
-  osThreadSuspend(teller02Handle);
+//  osThreadSuspend(teller02Handle);
   osThreadSuspend(teller03Handle);
 //  osThreadSuspend(updateSegmentHandle);
 //  osThreadSuspend(simMonitorInfoHandle);
@@ -553,8 +553,8 @@ static void MX_GPIO_Init(void)
 
   /*Configure GPIO pins : S1_SHLD_BUTTON_Pin S2_SHLD_BUTTON_Pin */
   GPIO_InitStruct.Pin = S1_SHLD_BUTTON_Pin|S2_SHLD_BUTTON_Pin;
-  GPIO_InitStruct.Mode = GPIO_MODE_IT_RISING_FALLING;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+  GPIO_InitStruct.Pull = GPIO_PULLUP;
   HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
   /*Configure GPIO pin : LD2_Pin */
@@ -566,8 +566,8 @@ static void MX_GPIO_Init(void)
 
   /*Configure GPIO pin : S3_SHLD_BUTTON_Pin */
   GPIO_InitStruct.Pin = S3_SHLD_BUTTON_Pin;
-  GPIO_InitStruct.Mode = GPIO_MODE_IT_RISING_FALLING;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+  GPIO_InitStruct.Pull = GPIO_PULLUP;
   HAL_GPIO_Init(S3_SHLD_BUTTON_GPIO_Port, &GPIO_InitStruct);
 
   /*Configure GPIO pins : SHLD_D7_SEG7_Clock_Pin SHLD_D8_SEG7_Data_Pin */
@@ -586,22 +586,22 @@ static void MX_GPIO_Init(void)
 
 /* USER CODE BEGIN MX_GPIO_Init_2 */
 
-  // S1_SHLD_BUTTON
-  HAL_NVIC_SetPriority(EXTI1_IRQn, 0, 0);
-  HAL_NVIC_EnableIRQ(EXTI1_IRQn);
-
-  // S2_SHLD_BUTTON
-  HAL_NVIC_SetPriority(EXTI4_IRQn, 0, 0);
-  HAL_NVIC_EnableIRQ(EXTI4_IRQn);
-
-  // S3_SHLD_BUTTON
-  HAL_NVIC_SetPriority(EXTI0_IRQn, 0, 0);
-  HAL_NVIC_EnableIRQ(EXTI0_IRQn);
+//  // S1_SHLD_BUTTON
+//  HAL_NVIC_SetPriority(EXTI1_IRQn, 0, 0);
+//  HAL_NVIC_EnableIRQ(EXTI1_IRQn);
+//
+//  // S2_SHLD_BUTTON
+//  HAL_NVIC_SetPriority(EXTI4_IRQn, 0, 0);
+//  HAL_NVIC_EnableIRQ(EXTI4_IRQn);
+//
+//  // S3_SHLD_BUTTON
+//  HAL_NVIC_SetPriority(EXTI0_IRQn, 0, 0);
+//  HAL_NVIC_EnableIRQ(EXTI0_IRQn);
 /* USER CODE END MX_GPIO_Init_2 */
 }
 
 /* USER CODE BEGIN 4 */
-void teller_functionality(TELLER_INFO* teller_info, osThreadId_t tellerHandler)
+void teller_functionality(TELLER_INFO* teller_info, osThreadId_t tellerHandler, GPIO_TypeDef* TELLER_GPIO_PORT, uint16_t TELLER_GPIO_PIN)
 {
 	CUSTOMER_INFO current_customer;
 	uint32_t customer_time_spent_in_queue;
@@ -610,7 +610,6 @@ void teller_functionality(TELLER_INFO* teller_info, osThreadId_t tellerHandler)
 
 	uint32_t pre_wait_reference;
 	uint32_t wait_discrepancy;
-
 	for(;;)
 	{
 		// Teller starts working.
@@ -680,14 +679,14 @@ void teller_functionality(TELLER_INFO* teller_info, osThreadId_t tellerHandler)
 		for(int i = 0; i < 2; i++) // check twice in case of chaining of natural break -> forced break
 		{
 			// Forced break -> takes priority over natural break.
-			if(teller_info->forced_break_flag == true)
+			if(HAL_GPIO_ReadPin(TELLER_GPIO_PORT, TELLER_GPIO_PIN) == GPIO_PIN_RESET)
 			{
 				// Grab reference point
 				forced_break_start_time = HAL_GetTick();
 				teller_info->status = status_on_break;
 
 				// Stay until the forced break is released
-				while(teller_info->forced_break_flag == true)
+				while(HAL_GPIO_ReadPin(TELLER_GPIO_PORT, TELLER_GPIO_PIN) == GPIO_PIN_RESET)
 				{
 					osDelay(1);
 				}
@@ -818,7 +817,7 @@ void StartTeller01(void *argument)
   /* Infinite loop */
 
   // All tellers share the same functionality.
-  teller_functionality(&teller01_info, teller01Handle);
+  teller_functionality(&teller01_info, teller01Handle, S1_SHLD_BUTTON_GPIO_Port, S1_SHLD_BUTTON_Pin);
 
   /* USER CODE END StartTeller01 */
 }
@@ -836,7 +835,7 @@ void StartTeller02(void *argument)
   /* Infinite loop */
 
   // All tellers share the same functionality.
-  teller_functionality(&teller02_info, teller02Handle);
+  teller_functionality(&teller02_info, teller02Handle, S2_SHLD_BUTTON_GPIO_Port, S2_SHLD_BUTTON_Pin);
 
   /* USER CODE END StartTeller02 */
 }
@@ -854,7 +853,7 @@ void StartTeller03(void *argument)
   /* Infinite loop */
 
   // All tellers share the same functionality.
-  teller_functionality(&teller03_info, teller03Handle);
+  teller_functionality(&teller03_info, teller03Handle, S3_SHLD_BUTTON_GPIO_Port, S3_SHLD_BUTTON_Pin);
 
   /* USER CODE END StartTeller03 */
 }

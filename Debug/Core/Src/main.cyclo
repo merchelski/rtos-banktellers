@@ -1,4 +1,3 @@
-../Core/Src/main.c:193:6:HAL_GPIO_EXTI_Callback	4
 ../Core/Src/main.c:229:20:shiftOut	2
 ../Core/Src/main.c:245:20:set_segment_digit	1
 ../Core/Src/main.c:259:6:set_segment_display	2
@@ -8,11 +7,11 @@
 ../Core/Src/main.c:495:13:MX_USART2_UART_Init	2
 ../Core/Src/main.c:530:13:MX_GPIO_Init	1
 ../Core/Src/main.c:604:6:teller_functionality	8
-../Core/Src/main.c:739:6:StartUpdateSegment	7
-../Core/Src/main.c:772:6:StartGenCustomerTask	2
-../Core/Src/main.c:815:6:StartTeller01	1
-../Core/Src/main.c:833:6:StartTeller02	1
-../Core/Src/main.c:851:6:StartTeller03	1
-../Core/Src/main.c:869:6:StartSimMonitorInfo	8
-../Core/Src/main.c:1038:6:HAL_TIM_PeriodElapsedCallback	2
-../Core/Src/main.c:1055:6:Error_Handler	1
+../Core/Src/main.c:738:6:StartUpdateSegment	7
+../Core/Src/main.c:771:6:StartGenCustomerTask	2
+../Core/Src/main.c:814:6:StartTeller01	1
+../Core/Src/main.c:832:6:StartTeller02	1
+../Core/Src/main.c:850:6:StartTeller03	1
+../Core/Src/main.c:868:6:StartSimMonitorInfo	8
+../Core/Src/main.c:1037:6:HAL_TIM_PeriodElapsedCallback	2
+../Core/Src/main.c:1054:6:Error_Handler	1
