@@ -186,37 +186,6 @@ void teller_functionality(TELLER_INFO* teller_info, osThreadId_t tellerHandler, 
 /* USER CODE BEGIN 0 */
 
 /**
-* @brief Callback for S1-S3 SHIELD BUTTONS interrupt.
-* @param GPIO_Pin: The GPIO_Pin of the button that generated the interrupt.
-* @retval None
-*/
-//void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
-//{
-//	TELLER_INFO* teller;
-//
-//	// First button corresponds to teller01.
-//	if(GPIO_Pin == S1_SHLD_BUTTON_Pin)
-//	{
-//		teller = &teller01_info;
-//	}
-//
-//	// Second button corresponds to teller02.
-//	if(GPIO_Pin == S2_SHLD_BUTTON_Pin)
-//	{
-//		teller = &teller02_info;
-//	}
-//
-//	// Third button corresponds to teller03.
-//	if(GPIO_Pin == S3_SHLD_BUTTON_Pin)
-//	{
-//		teller = &teller03_info;
-//	}
-//
-//	// Callback is triggered by both the rising AND falling edge, so we just toggle.
-//	teller->forced_break_flag ^= 1;
-//}
-
-/**
 * @brief Sets 7-segment pin values using a shift register.
 *
 * @param data_port: The port of the GPIO pin associated with the data of the display.
@@ -586,17 +555,6 @@ static void MX_GPIO_Init(void)
 
 /* USER CODE BEGIN MX_GPIO_Init_2 */
 
-//  // S1_SHLD_BUTTON
-//  HAL_NVIC_SetPriority(EXTI1_IRQn, 0, 0);
-//  HAL_NVIC_EnableIRQ(EXTI1_IRQn);
-//
-//  // S2_SHLD_BUTTON
-//  HAL_NVIC_SetPriority(EXTI4_IRQn, 0, 0);
-//  HAL_NVIC_EnableIRQ(EXTI4_IRQn);
-//
-//  // S3_SHLD_BUTTON
-//  HAL_NVIC_SetPriority(EXTI0_IRQn, 0, 0);
-//  HAL_NVIC_EnableIRQ(EXTI0_IRQn);
 /* USER CODE END MX_GPIO_Init_2 */
 }
 
