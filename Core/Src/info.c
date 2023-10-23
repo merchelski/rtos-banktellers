@@ -31,7 +31,7 @@ void init_teller(TELLER_INFO* teller)
 	teller->total_breaks_taken = 0;
 	teller->total_customers_serviced = 0;
 	teller->next_available_natural_break_time = rand_range(MIN_TELLER_BREAK_WAIT, MAX_TELLER_BREAK_WAIT);
-	teller->status = status_waiting;
+	teller->status = status_didnt_show_up;
 	teller->forced_break_flag = false;
 
 }

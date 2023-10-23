@@ -34,7 +34,8 @@ enum enum_teller_status
 	status_working,
 	status_waiting, // Waiting for customer.
 	status_on_break,
-	status_done_for_the_day
+	status_done_for_the_day,
+	status_didnt_show_up
 } ;
 
 typedef struct TELLER_INFO_STRUCT

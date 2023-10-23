@@ -125,6 +125,8 @@ const osMutexAttr_t Mutex01_attributes = {
   .name = "Mutex01"
 };
 /* USER CODE BEGIN PV */
+bool work_is_done = false;
+
 uint32_t SIMULATED_TIME_START;
 
 // 7-segment display digits.
@@ -150,7 +152,7 @@ const uint8_t SEGMENT_NUM[10] = {
 };
 
 // Converts teller's status to a string for display purposes.
-const char* STATUS_TO_STR[4] = {"working", "waiting", "on break", "done for the day"};
+const char* STATUS_TO_STR[5] = {"working", "waiting", "on break", "done for the day", "didn't show up..."};
 
 // Stores all info related to tellers.
 TELLER_INFO teller01_info;
@@ -364,8 +366,8 @@ int main(void)
   /* ----- SUSPEND THREADS -----*/
 //  osThreadSuspend(genCustomerHandle);
 //  osThreadSuspend(teller01Handle);
-//  osThreadSuspend(teller02Handle);
-//  osThreadSuspend(teller03Handle);
+  osThreadSuspend(teller02Handle);
+  osThreadSuspend(teller03Handle);
 //  osThreadSuspend(updateSegmentHandle);
 //  osThreadSuspend(simMonitorInfoHandle);
 
@@ -615,7 +617,7 @@ void teller_functionality(TELLER_INFO* teller_info, osThreadId_t tellerHandler)
 		teller_info->status = status_working;
 
 		// Stop teller when the day ends.
-		if(HAL_GetTick() >= (TOTAL_SIM_TIME_MS + SIMULATED_TIME_START))
+		if((osMessageQueueGetCount(customerQueueHandle) == 0) && (HAL_GetTick() >= (TOTAL_SIM_TIME_MS + SIMULATED_TIME_START)))
 		{
 			teller_info->status = status_done_for_the_day;
 			osThreadSuspend(tellerHandler);
@@ -638,6 +640,14 @@ void teller_functionality(TELLER_INFO* teller_info, osThreadId_t tellerHandler)
 
 		// This is time the customer had to wait in the queue before being serviced.
 		customer_time_spent_in_queue = HAL_GetTick() - current_customer.time_entered_queue;
+//		if(HAL_GetTick() > current_customer.time_entered_queue)
+//		{
+//			customer_time_spent_in_queue = HAL_GetTick() - current_customer.time_entered_queue;
+//		}
+//		else
+//		{
+//			customer_time_spent_in_queue = customer_time_spent_in_queue - HAL_GetTick();
+//		}
 
 		// [B: 1/2] If the time discrepancy is too high, it probably means the teller had to wait...
 		if(wait_discrepancy > TELLER_WAIT_TOLERANCE)
@@ -667,51 +677,53 @@ void teller_functionality(TELLER_INFO* teller_info, osThreadId_t tellerHandler)
 
 
 		/* --- Check for breaks only after finishing with a customer --- */
-
-		// Forced break -> takes priority over natural break.
-		if(teller_info->forced_break_flag == true)
+		for(int i = 0; i < 2; i++) // check twice in case of chaining of natural break -> forced break
 		{
-			// Grab reference point
-			forced_break_start_time = HAL_GetTick();
-			teller_info->status = status_on_break;
-
-			// Stay until the forced break is released
-			while(teller_info->forced_break_flag == true)
+			// Forced break -> takes priority over natural break.
+			if(teller_info->forced_break_flag == true)
 			{
-				osDelay(1);
+				// Grab reference point
+				forced_break_start_time = HAL_GetTick();
+				teller_info->status = status_on_break;
+
+				// Stay until the forced break is released
+				while(teller_info->forced_break_flag == true)
+				{
+					osDelay(1);
+				}
+
+				// Break ends.
+				teller_info->status = status_working;
+
+				// [C: 1/2] Calculate break time and updated statistics...
+				break_time = HAL_GetTick() - forced_break_start_time;
+				teller_info->max_break_time = MAX(teller_info->max_break_time, break_time);
+				teller_info->min_break_time = MIN(teller_info->min_break_time, break_time);
+				teller_info->total_break_time += break_time;
+				teller_info->total_breaks_taken++;
+
+				// [C: 2/2] ...teller was just on break, so recalculate next available natural break time
+				teller_info->next_available_natural_break_time = HAL_GetTick() + rand_range(MIN_TELLER_BREAK_WAIT, MAX_TELLER_BREAK_WAIT);
+
+
+			} // Natural break.
+			else if(HAL_GetTick() >= teller_info->next_available_natural_break_time)
+			{
+
+				// Generate a random break duration and update statistics.
+				break_time = rand_range(MIN_TELLER_BREAK_TIME, MAX_TELLER_BREAK_TIME);
+				teller_info->max_break_time = MAX(teller_info->max_break_time, break_time);
+				teller_info->min_break_time = MIN(teller_info->min_break_time, break_time);
+				teller_info->total_break_time += break_time;
+				teller_info->total_breaks_taken++;
+
+				// Generate next available break.
+				teller_info->next_available_natural_break_time = HAL_GetTick() + rand_range(MIN_TELLER_BREAK_WAIT, MAX_TELLER_BREAK_WAIT);
+
+				// Go on break.
+				teller_info->status = status_on_break;
+				osDelay(break_time);
 			}
-
-			// Break ends.
-			teller_info->status = status_working;
-
-			// [C: 1/2] Calculate break time and updated statistics...
-			break_time = HAL_GetTick() - forced_break_start_time;
-			teller_info->max_break_time = MAX(teller_info->max_break_time, break_time);
-			teller_info->min_break_time = MIN(teller_info->min_break_time, break_time);
-			teller_info->total_break_time += break_time;
-			teller_info->total_breaks_taken++;
-
-			// [C: 2/2] ...teller was just on break, so recalculate next available natural break time
-			teller_info->next_available_natural_break_time = HAL_GetTick() + rand_range(MIN_TELLER_BREAK_WAIT, MAX_TELLER_BREAK_WAIT);
-
-
-		} // Natural break.
-		else if(HAL_GetTick() >= teller_info->next_available_natural_break_time)
-		{
-
-			// Generate a random break duration and update statistics.
-			break_time = rand_range(MIN_TELLER_BREAK_TIME, MAX_TELLER_BREAK_TIME);
-			teller_info->max_break_time = MAX(teller_info->max_break_time, break_time);
-			teller_info->min_break_time = MIN(teller_info->min_break_time, break_time);
-			teller_info->total_break_time += break_time;
-			teller_info->total_breaks_taken++;
-
-			// Generate next available break.
-			teller_info->next_available_natural_break_time = HAL_GetTick() + rand_range(MIN_TELLER_BREAK_WAIT, MAX_TELLER_BREAK_WAIT);
-
-			// Go on break.
-			teller_info->status = status_on_break;
-			osDelay(break_time);
 		}
 	}
 }
@@ -730,8 +742,13 @@ void StartUpdateSegment(void *argument)
   /* Infinite loop */
   for(;;)
   {
-	// Stop generator when the day ends.
-	if(HAL_GetTick() >= (TOTAL_SIM_TIME_MS + SIMULATED_TIME_START))
+	// Stop generator when the day ends and all work is done.
+	bool work_is_done = (osMessageQueueGetCount(customerQueueHandle) == 0) &&
+						((eTaskGetState(teller01Handle) == eSuspended) ||
+	  					(eTaskGetState(teller02Handle) == eSuspended) ||
+						(eTaskGetState(teller03Handle) == eSuspended));
+
+	if(work_is_done && (HAL_GetTick() >= (TOTAL_SIM_TIME_MS + SIMULATED_TIME_START)))
 	{
 		osThreadSuspend(updateSegmentHandle);
 	}
@@ -763,6 +780,7 @@ void StartGenCustomerTask(void *argument)
   for(;;)
   {
 	// Stop generator when the day ends.
+
 	if(HAL_GetTick() >= (TOTAL_SIM_TIME_MS + SIMULATED_TIME_START))
 	{
 		osThreadSuspend(genCustomerHandle);
@@ -865,19 +883,10 @@ void StartSimMonitorInfo(void *argument)
   uint32_t total_wait_time;
   uint32_t total_num_waits;
 
+
   for(;;)
   {
 	current_time_ms = HAL_GetTick();
-
-	if(HAL_GetTick() >= (TOTAL_SIM_TIME_MS + SIMULATED_TIME_START))
-	{
-		while((eTaskGetState(teller01Handle) != eSuspended) ||
-				(eTaskGetState(teller02Handle) != eSuspended) ||
-				(eTaskGetState(teller03Handle) != eSuspended))
-		{
-			osDelay(1);
-		}
-	}
 
 	sim_hours = MS_TO_SIM_HOURS(current_time_ms);
 	sim_min = MS_TO_SIM_MIN(current_time_ms);
@@ -890,7 +899,7 @@ void StartSimMonitorInfo(void *argument)
 	monitor_data_size = sprintf((char*)monitor_buffer, "\r\n\r\nCURRENT TIME: %02ld:%02ld%s\r\nCustomers in queue: %ld\r\nTeller01 status: %s\r\nTeller02 status: %s\r\nTeller03 status: %s\r\n\r\n\r\n",
 															(((sim_hours + 8) % 12) + 1),
 															(sim_min % 60),
-															(sim_hours < 3 ? "am" : "pm"),
+															(((sim_hours + 9) % 24) < 12 ? "am" : "pm"),
 															osMessageQueueGetCount(customerQueueHandle),
 															teller01_info_str,
 															teller02_info_str,
@@ -899,9 +908,12 @@ void StartSimMonitorInfo(void *argument)
 	// [A: 2/2] ... and print it.
 	HAL_UART_Transmit(&huart2, monitor_buffer, monitor_data_size, 100U);
 
-
-	// Stop when the day ends.
-	if(HAL_GetTick() >= (TOTAL_SIM_TIME_MS + SIMULATED_TIME_START))
+	// Stop when the day ends and all work is done.
+	bool work_is_done = (osMessageQueueGetCount(customerQueueHandle) == 0) &&
+							((eTaskGetState(teller01Handle) == eSuspended) ||
+		  					(eTaskGetState(teller02Handle) == eSuspended) ||
+							(eTaskGetState(teller03Handle) == eSuspended));
+	if(work_is_done && (HAL_GetTick() >= (TOTAL_SIM_TIME_MS + SIMULATED_TIME_START)))
 	{
 		/* --- At the end of the day, gather all statistics --- */
 
@@ -956,17 +968,17 @@ void StartSimMonitorInfo(void *argument)
 
 		// The maximum wait time for tellers waiting for customers.
 		monitor_data_size = sprintf((char*)monitor_buffer, "The maximum wait time for tellers waiting for customers: %ld seconds\r\n",
-				MAX(MAX(teller01_info.max_wait_time, teller02_info.max_wait_time), teller03_info.max_wait_time));
+				MS_TO_SIM_SEC(MAX(MAX(teller01_info.max_wait_time, teller02_info.max_wait_time), teller03_info.max_wait_time)));
 		HAL_UART_Transmit(&huart2, monitor_buffer, monitor_data_size, 100U);
 
 		// The maximum transaction time for the tellers.
 		monitor_data_size = sprintf((char*)monitor_buffer, "The maximum transaction time for the tellers: %ld seconds\r\n",
-				MAX(MAX(teller01_info.max_service_time, teller02_info.max_service_time), teller03_info.max_service_time));
+				MS_TO_SIM_SEC(MAX(MAX(teller01_info.max_service_time, teller02_info.max_service_time), teller03_info.max_service_time)));
 		HAL_UART_Transmit(&huart2, monitor_buffer, monitor_data_size, 100U);
 
 		// The maximum depth of the customer queue.
-		monitor_data_size = sprintf((char*)monitor_buffer, "The maximum depth of the customer queue: %d\r\n",
-				max_customer_queue_depth);
+		monitor_data_size = sprintf((char*)monitor_buffer, "The maximum depth of the customer queue: %ld\r\n",
+				MS_TO_SIM_SEC(max_customer_queue_depth));
 		HAL_UART_Transmit(&huart2, monitor_buffer, monitor_data_size, 100U);
 
 		// The idle hook count.
@@ -983,26 +995,26 @@ void StartSimMonitorInfo(void *argument)
 		HAL_UART_Transmit(&huart2, monitor_buffer, monitor_data_size, 100U);
 
 		// Average break time for each of the three tellers.
-		monitor_data_size = sprintf((char*)monitor_buffer, "Average break time for each of the three tellers\r\n\tTeller01: %d\r\n\tTeller02: %d\r\n\tTeller03: %d\r\n",
-				teller01_info.total_break_time / teller01_info.total_breaks_taken,
-				teller02_info.total_break_time / teller02_info.total_breaks_taken,
-				teller03_info.total_break_time / teller03_info.total_breaks_taken);
+		monitor_data_size = sprintf((char*)monitor_buffer, "Average break time for each of the three tellers\r\n\tTeller01: %ld\r\n\tTeller02: %ld\r\n\tTeller03: %ld\r\n",
+				MS_TO_SIM_SEC(teller01_info.total_break_time / teller01_info.total_breaks_taken),
+				MS_TO_SIM_SEC(teller02_info.total_break_time / teller02_info.total_breaks_taken),
+				MS_TO_SIM_SEC(teller03_info.total_break_time / teller03_info.total_breaks_taken));
 
 		HAL_UART_Transmit(&huart2, monitor_buffer, monitor_data_size, 100U);
 
 		// Longest break time for each of the three tellers
 		monitor_data_size = sprintf((char*)monitor_buffer, "Longest break time for each of the three tellers\r\n\tTeller01: %ld\r\n\tTeller02: %ld\r\n\tTeller03: %ld\r\n",
-				teller01_info.max_break_time,
-				teller02_info.max_break_time,
-				teller03_info.max_break_time);
+				MS_TO_SIM_SEC(teller01_info.max_break_time),
+				MS_TO_SIM_SEC(teller02_info.max_break_time),
+				MS_TO_SIM_SEC(teller03_info.max_break_time));
 
 		HAL_UART_Transmit(&huart2, monitor_buffer, monitor_data_size, 100U);
 
 		// Shortest break time for each of the three tellers
 		monitor_data_size = sprintf((char*)monitor_buffer, "Shortest break time for each of the three tellers\r\n\tTeller01: %ld\r\n\tTeller02: %ld\r\n\tTeller03: %ld\r\n",
-				teller01_info.min_break_time,
-				teller02_info.min_break_time,
-				teller03_info.min_break_time);
+				MS_TO_SIM_SEC(teller01_info.min_break_time),
+				MS_TO_SIM_SEC(teller02_info.min_break_time),
+				MS_TO_SIM_SEC(teller03_info.min_break_time));
 
 		HAL_UART_Transmit(&huart2, monitor_buffer, monitor_data_size, 100U);
 
