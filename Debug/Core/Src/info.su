@@ -1,0 +1,2 @@
+../Core/Src/info.c:21:6:init_teller	16	static
+../Core/Src/info.c:39:6:reset_and_init_customer	16	static

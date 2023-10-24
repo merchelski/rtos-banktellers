@@ -1,0 +1,3 @@
+../Core/Src/rng.c:19:24:rotl	48	static
+../Core/Src/rng.c:27:10:generate_random_u64	80	static
+../Core/Src/rng.c:40:10:rand_range	72	static
