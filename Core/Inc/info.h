@@ -58,8 +58,6 @@ typedef struct TELLER_INFO_STRUCT
 	uint16_t total_wait_time;
 	uint16_t total_waits_taken;
 
-	bool forced_break_flag;
-
 	enum enum_teller_status status;
 } TELLER_INFO;
 
