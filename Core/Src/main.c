@@ -586,6 +586,8 @@ void teller_functionality(TELLER_INFO* teller_info, osThreadId_t tellerHandler, 
 
 	uint32_t pre_wait_reference;
 	uint32_t wait_discrepancy;
+	uint32_t natural_break_start_time;
+
 	for(;;)
 	{
 		// Teller starts working.
@@ -641,57 +643,75 @@ void teller_functionality(TELLER_INFO* teller_info, osThreadId_t tellerHandler, 
 
 		// Simulate time spent servicing customer.
 		osDelay(current_customer.service_time);
-
+		bool natural_break_flag = false;
 
 		/* --- Check for breaks only after finishing with a customer --- */
-		for(int i = 0; i < 2; i++) // check twice in case of chaining of natural break -> forced break
-		{
-			// Forced break -> takes priority over natural break.
-			if(HAL_GPIO_ReadPin(TELLER_GPIO_PORT, TELLER_GPIO_PIN) == FORCE_BREAK_BUTTON_PRESSED)
-			{
-				// Grab reference point
-				forced_break_start_time = HAL_GetTick();
-				teller_info->status = status_on_break;
+		if(HAL_GetTick() >= teller_info->next_available_natural_break_time){ // natural break
+		  natural_break_flag = true;
+		  // Generate a random break duration and update statistics.
+		  break_time = rand_range(MIN_TELLER_BREAK_TIME, MAX_TELLER_BREAK_TIME);
 
-				// Stay until the forced break is released
-				while(HAL_GPIO_ReadPin(TELLER_GPIO_PORT, TELLER_GPIO_PIN) == FORCE_BREAK_BUTTON_PRESSED)
-				{
-					osDelay(1);
-				}
+		  // Generate next available break.
+		  teller_info->next_available_natural_break_time = HAL_GetTick() + rand_range(MIN_TELLER_BREAK_WAIT, MAX_TELLER_BREAK_WAIT);
 
-				// Break ends.
-				teller_info->status = status_working;
-
-				// [C: 1/2] Calculate break time and updated statistics...
-				break_time = HAL_GetTick() - forced_break_start_time;
-				teller_info->max_break_time = MAX(teller_info->max_break_time, break_time);
-				teller_info->min_break_time = MIN(teller_info->min_break_time, break_time);
-				teller_info->total_break_time += break_time;
-				teller_info->total_breaks_taken++;
-
-				// [C: 2/2] ...teller was just on break, so recalculate next available natural break time
-				teller_info->next_available_natural_break_time = HAL_GetTick() + rand_range(MIN_TELLER_BREAK_WAIT, MAX_TELLER_BREAK_WAIT);
-
-
-			} // Natural break.
-			else if(HAL_GetTick() >= teller_info->next_available_natural_break_time)
-			{
-
-				// Generate a random break duration and update statistics.
-				break_time = rand_range(MIN_TELLER_BREAK_TIME, MAX_TELLER_BREAK_TIME);
-				teller_info->max_break_time = MAX(teller_info->max_break_time, break_time);
-				teller_info->min_break_time = MIN(teller_info->min_break_time, break_time);
-				teller_info->total_break_time += break_time;
-				teller_info->total_breaks_taken++;
-
-				// Generate next available break.
-				teller_info->next_available_natural_break_time = HAL_GetTick() + rand_range(MIN_TELLER_BREAK_WAIT, MAX_TELLER_BREAK_WAIT);
-
-				// Go on break.
-				teller_info->status = status_on_break;
-				osDelay(break_time);
-			}
+		  // Go on break.
+		  teller_info->status = status_on_break;
+		  natural_break_start_time = HAL_GetTick();
+		  uint32_t natural_break_end_time = natural_break_start_time + break_time;
+		  while(HAL_GetTick() < natural_break_end_time && HAL_GPIO_ReadPin(TELLER_GPIO_PORT, TELLER_GPIO_PIN) != FORCE_BREAK_BUTTON_PRESSED){
+			osDelay(1); //
+		  }
+		  if(HAL_GetTick() >= natural_break_end_time){
+			//finished natural break
+			natural_break_flag = false;
+			teller_info->max_break_time = MAX(teller_info->max_break_time, break_time);
+			teller_info->min_break_time = MIN(teller_info->min_break_time, break_time);
+			teller_info->total_break_time += break_time;
+			teller_info->total_breaks_taken++;
+			teller_info->status = status_working;
+		  }
 		}
+		// Forced break
+		if(HAL_GPIO_ReadPin(TELLER_GPIO_PORT, TELLER_GPIO_PIN) == FORCE_BREAK_BUTTON_PRESSED)
+		{
+		  // Grab reference point
+		  forced_break_start_time = HAL_GetTick();
+		  teller_info->status = status_on_break;
+
+		  // Stay until the forced break is released
+		  while(HAL_GPIO_ReadPin(TELLER_GPIO_PORT, TELLER_GPIO_PIN) == FORCE_BREAK_BUTTON_PRESSED)
+		  {
+			osDelay(1);
+		  }
+
+		  // Break ends.
+		  teller_info->status = status_working;
+
+		  // [C: 1/2] Calculate break time and updated statistics...
+		  if(natural_break_flag == false){
+			break_time = HAL_GetTick() - forced_break_start_time;
+			teller_info->max_break_time = MAX(teller_info->max_break_time, break_time);
+			teller_info->min_break_time = MIN(teller_info->min_break_time, break_time);
+			teller_info->total_break_time += break_time;
+			teller_info->total_breaks_taken++;
+		  }
+		  else{
+			natural_break_flag = false;
+			break_time = HAL_GetTick() - natural_break_start_time;
+			teller_info->max_break_time = MAX(teller_info->max_break_time, break_time);
+			teller_info->min_break_time = MIN(teller_info->min_break_time, break_time);
+			teller_info->total_break_time += break_time;
+			teller_info->total_breaks_taken++;
+			teller_info->status = status_working;
+
+		  }
+
+		  // [C: 2/2] ...teller was just on break, so recalculate next available natural break time
+		  teller_info->next_available_natural_break_time = HAL_GetTick() + rand_range(MIN_TELLER_BREAK_WAIT, MAX_TELLER_BREAK_WAIT);
+
+
+		} // break end
+
 	}
 }
 /* USER CODE END 4 */
