@@ -867,13 +867,16 @@ void StartSimMonitorInfo(void *argument)
 	max_customer_queue_depth = MAX(max_customer_queue_depth, osMessageQueueGetCount(customerQueueHandle));
 
 	// [A: 1/2] Build up the real time data...
-	monitor_data_size = sprintf((char*)monitor_buffer, "\r\n\r\nCURRENT TIME: %02ld:%02ld%s\r\nCustomers in queue: %ld\r\nTeller01 status: %s\r\nTeller02 status: %s\r\nTeller03 status: %s\r\n\r\n\r\n",
+	monitor_data_size = sprintf((char*)monitor_buffer, "\r\n\r\nCURRENT TIME: %02ld:%02ld%s\r\nCustomers in queue: %ld\r\nTeller01[%d] status: %s\r\nTeller02[%d] status: %s\r\nTeller03[%d] status: %s\r\n\r\n\r\n",
 															(((sim_hours + 8) % 12) + 1),
 															(sim_min % 60),
 															(((sim_hours + 9) % 24) < 12 ? "am" : "pm"),
 															osMessageQueueGetCount(customerQueueHandle),
+															teller01_info.total_customers_serviced,
 															teller01_info_str,
+															teller02_info.total_customers_serviced,
 															teller02_info_str,
+															teller03_info.total_customers_serviced,
 															teller03_info_str);
 
 	// [A: 2/2] ... and print it.
